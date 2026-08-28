@@ -1,0 +1,6 @@
+{
+  "name": "SurplusX",
+  "description": "Surplus food rescue marketplace, business surplus manager, NGO donation & live GPS logistics ecosystem, and impact tracking platform.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
