@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CategoryType, SurplusListing } from '../../types';
-import { LocationDiscoveryBanner } from '../location/LocationDiscoveryBanner';
+import { LocationCard } from '../location/LocationCard';
 
 export const BrowseListings: React.FC = () => {
   const {
@@ -106,7 +106,7 @@ export const BrowseListings: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Location-Based Discovery & Radius Status Banner */}
-      <LocationDiscoveryBanner />
+      <LocationCard variant="full" />
 
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -216,27 +216,20 @@ export const BrowseListings: React.FC = () => {
             </div>
           </div>
 
-          {/* Distance */}
-          <div>
-            <div className="flex items-center justify-between text-xs font-bold text-slate-900 mb-2">
-              <span>Filter Distance</span>
-              <span className="text-emerald-600">{maxDistanceKm} km</span>
+          {/* Platform Discovery Radius Policy (Server-Authoritative) */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-900">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Discovery Radius</span>
+              </span>
+              <span className="text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md text-[11px] font-extrabold">
+                {appliedDiscoveryRadius} km
+              </span>
             </div>
-            <div className="grid grid-cols-4 gap-1 text-[11px]">
-              {[5, 10, 20, 40].map((dist) => (
-                <button
-                  key={dist}
-                  onClick={() => setMaxDistanceKm(dist)}
-                  className={`py-1.5 rounded-lg border text-center font-medium transition-colors cursor-pointer ${
-                    maxDistanceKm === dist
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  {dist}km
-                </button>
-              ))}
-            </div>
+            <p className="text-[11px] text-slate-500 leading-tight">
+              Server-enforced platform policy for <strong>{appliedLocalityType}</strong> localities. Orders require verified geographic proximity.
+            </p>
           </div>
 
           {/* Dietary Preferences */}

@@ -323,14 +323,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Authoritative Geo-Radius & Location Engine State
   const [userLocation, setUserLocation] = useState<UserLocation>({
     id: 'loc-init',
-    latitude: 12.9716,
-    longitude: 77.5946,
+    latitude: 17.4483,
+    longitude: 78.3915,
     accuracy: 15,
+    formattedAddress: 'Main Road, Madhapur, Hyderabad, Telangana 500081, India',
+    area: 'Madhapur',
+    city: 'Hyderabad',
+    district: 'Hyderabad',
+    state: 'Telangana',
+    postalCode: '500081',
+    country: 'India',
+    countryCode: 'in',
     source: 'GPS',
-    localityType: 'CITY',
-    localityName: 'Bengaluru Urban Metro (Central)',
-    district: 'Bengaluru Urban',
-    state: 'Karnataka',
+    localityType: 'METRO',
+    localityName: 'Madhapur Tech Hub',
     updatedAt: new Date().toISOString(),
     isLiveGps: true,
   });
@@ -1120,21 +1126,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const accuracy = position.coords.accuracy || 15;
 
           try {
-            const res = await fetch(`/api/location/classification?lat=${lat}&lng=${lng}`);
+            const res = await fetch(`/api/location/reverse-geocode?lat=${lat}&lng=${lng}&accuracy=${accuracy}`);
             const data = await res.json();
-            const classification = data.classification || classifyServerLocality(lat, lng);
 
+            if (data.success && data.location) {
+              setUserLocation(data.location);
+              setLocationPermission('GRANTED');
+              setIsRequestingLocation(false);
+              updateListingsWithDistance(lat, lng);
+
+              triggerToast(
+                `Live GPS verified: ${data.location.localityName || data.location.district} (${data.location.localityType} Area • ${
+                  data.appliedPolicy?.radiusKm || (data.location.localityType === 'VILLAGE' ? 20 : 40)
+                } km Discovery Radius)`,
+                'success'
+              );
+              resolve(true);
+              return;
+            }
+
+            const classification = classifyServerLocality(lat, lng);
             const updatedLoc: UserLocation = {
               id: `loc-${Date.now()}`,
               userId: currentUser?.id,
               latitude: lat,
               longitude: lng,
               accuracy,
+              formattedAddress: `${classification.localityName}, ${classification.district}, ${classification.state}, India`,
+              area: classification.localityName,
+              city: classification.district,
+              district: classification.district,
+              state: classification.state,
+              country: 'India',
+              countryCode: 'in',
               source: 'GPS',
               localityType: classification.localityType,
               localityName: classification.localityName,
-              district: classification.district,
-              state: classification.state,
               updatedAt: new Date().toISOString(),
               isLiveGps: true,
             };
@@ -1159,11 +1186,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               latitude: lat,
               longitude: lng,
               accuracy,
+              formattedAddress: `${classification.localityName}, ${classification.district}, ${classification.state}, India`,
+              area: classification.localityName,
+              city: classification.district,
+              district: classification.district,
+              state: classification.state,
+              country: 'India',
+              countryCode: 'in',
               source: 'GPS',
               localityType: classification.localityType,
               localityName: classification.localityName,
-              district: classification.district,
-              state: classification.state,
               updatedAt: new Date().toISOString(),
               isLiveGps: true,
             });

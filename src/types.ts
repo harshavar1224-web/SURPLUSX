@@ -17,15 +17,29 @@ export interface UserLocation {
   userId?: string;
   latitude: number;
   longitude: number;
-  accuracy: number;
-  source: LocationSource;
-  localityType: LocalityType;
-  localityName: string;
+  accuracy: number; // in meters
+  formattedAddress: string;
+  houseNumber?: string;
+  street?: string;
+  area?: string;
+  village?: string;
+  town?: string;
+  city?: string;
   district: string;
   state: string;
-  pincode?: string;
+  stateCode?: string;
+  postalCode?: string;
+  country: string;
+  countryCode: string;
+  localityType: LocalityType;
+  source: LocationSource; // 'GPS' | 'MANUAL' | 'PROFILE' | 'SYSTEM'
+  isCurrent?: boolean;
+  createdAt?: string;
   updatedAt: string;
   isLiveGps: boolean;
+  // Backward compatibility convenience accessors
+  localityName: string;
+  pincode?: string;
 }
 
 export interface BusinessLocation {
@@ -34,10 +48,15 @@ export interface BusinessLocation {
   latitude: number;
   longitude: number;
   address: string;
+  formatted_address?: string;
+  area?: string;
   locality: string;
   city: string;
+  district?: string;
   state: string;
   postalCode: string;
+  postal_code?: string;
+  country?: string;
   verified: boolean;
   localityType: LocalityType;
   createdAt: string;

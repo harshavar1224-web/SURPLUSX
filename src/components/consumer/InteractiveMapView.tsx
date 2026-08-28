@@ -1,25 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
 import {
   MapPin,
-  Navigation,
   List,
-  Layers,
-  ZoomIn,
-  ZoomOut,
   Crosshair,
   Store,
   Clock,
   Sparkles,
   ArrowRight,
-  Filter,
+  ShieldCheck,
+  Building2,
+  Home,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SurplusListing, CategoryType } from '../../types';
+import { LocationCard } from '../location/LocationCard';
 
 export const InteractiveMapView: React.FC = () => {
-  const { listings, setActiveView, setSelectedListing, selectedCategory, setSelectedCategory } = useApp();
-  const [selectedMapItem, setSelectedMapItem] = useState<SurplusListing>(listings[0]);
-  const [zoomLevel, setZoomLevel] = useState<number>(14);
+  const {
+    listings,
+    setActiveView,
+    setSelectedListing,
+    selectedCategory,
+    setSelectedCategory,
+    userLocation,
+    appliedDiscoveryRadius,
+    appliedLocalityType,
+    requestLiveLocation,
+    isRequestingLocation,
+    setIsLocationModalOpen,
+  } = useApp();
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const radiusCircleRef = useRef<L.Circle | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
+
+  const [selectedMapItem, setSelectedMapItem] = useState<SurplusListing | null>(null);
+  const [showRadiusBoundary, setShowRadiusBoundary] = useState(true);
 
   const categories: ('All' | CategoryType)[] = [
     'All',
@@ -30,280 +52,307 @@ export const InteractiveMapView: React.FC = () => {
     'Cooked Meals',
   ];
 
-  // Map pin coordinate positions relative to SVG viewport (500x350)
-  const pinPositions: Record<string, { x: number; y: number }> = {
-    'listing-1': { x: 380, y: 150 }, // Green Basket Store
-    'listing-2': { x: 230, y: 120 }, // Bake House (Indiranagar)
-    'listing-3': { x: 420, y: 240 }, // Spice Kitchen
-    'listing-4': { x: 190, y: 220 }, // Fruit World
-    'listing-5': { x: 360, y: 290 }, // Daily Dairy
-    'listing-6': { x: 280, y: 170 }, // Cool Drinks
+  // Filter listings by selected category and within radius
+  const filteredListings = listings.filter((item) => {
+    if (selectedCategory !== 'All' && item.category !== selectedCategory) {
+      if (!(selectedCategory === 'Food' && item.category !== 'Others')) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // 1. Initialize Map
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapContainerRef.current, {
+        center: [userLocation.latitude, userLocation.longitude],
+        zoom: appliedLocalityType === 'VILLAGE' ? 12 : 13,
+        zoomControl: false,
+      });
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // OpenStreetMap Tile Layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      const markersGroup = L.layerGroup().addTo(map);
+      markersLayerRef.current = markersGroup;
+      mapInstanceRef.current = map;
+    }
+
+    return () => {
+      // Cleanup on unmount
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // 2. Update User Location & Radius Circle
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const userLat = userLocation.latitude;
+    const userLng = userLocation.longitude;
+
+    // Pan map to user location
+    map.setView([userLat, userLng], map.getZoom());
+
+    // Update User Marker
+    if (userMarkerRef.current) {
+      userMarkerRef.current.remove();
+    }
+
+    const userIcon = L.divIcon({
+      className: 'custom-user-pin',
+      html: `
+        <div class="relative flex items-center justify-center -translate-x-1/2 -translate-y-1/2">
+          <div class="absolute w-9 h-9 rounded-full bg-emerald-500/30 animate-ping"></div>
+          <div class="relative w-8 h-8 rounded-full bg-emerald-600 border-2 border-white shadow-lg flex items-center justify-center text-white">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="3" fill="currentColor"/>
+            </svg>
+          </div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+
+    const newUserMarker = L.marker([userLat, userLng], { icon: userIcon })
+      .addTo(map)
+      .bindPopup(
+        `<div class="p-2 text-xs">
+          <div class="font-bold text-slate-900">${userLocation.localityName || 'Your Location'}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">${userLocation.formattedAddress || 'India'}</div>
+          <div class="mt-1.5 inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+            ${userLocation.localityType} Area • ${appliedDiscoveryRadius} km Discovery Radius
+          </div>
+        </div>`
+      );
+
+    userMarkerRef.current = newUserMarker;
+
+    // Update Discovery Radius Boundary Circle
+    if (radiusCircleRef.current) {
+      radiusCircleRef.current.remove();
+    }
+
+    if (showRadiusBoundary) {
+      const radiusMeters = appliedDiscoveryRadius * 1000;
+      const circle = L.circle([userLat, userLng], {
+        radius: radiusMeters,
+        color: '#10b981',
+        weight: 2,
+        dashArray: '6, 6',
+        fillColor: '#10b981',
+        fillOpacity: 0.05,
+      }).addTo(map);
+
+      radiusCircleRef.current = circle;
+    }
+  }, [userLocation, appliedDiscoveryRadius, appliedLocalityType, showRadiusBoundary]);
+
+  // 3. Render Listing Pins
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const markersGroup = markersLayerRef.current;
+    if (!map || !markersGroup) return;
+
+    markersGroup.clearLayers();
+
+    filteredListings.forEach((item) => {
+      if (!item.coordinates || typeof item.coordinates.lat !== 'number' || typeof item.coordinates.lng !== 'number') {
+        return;
+      }
+
+      const isInsideRadius = typeof item.distanceKm === 'number' ? item.distanceKm <= appliedDiscoveryRadius : true;
+      const isSelected = selectedMapItem?.id === item.id;
+
+      const listingPinIcon = L.divIcon({
+        className: 'custom-listing-pin',
+        html: `
+          <div class="cursor-pointer transition-transform hover:scale-110 flex flex-col items-center -translate-x-1/2 -translate-y-full">
+            <div class="px-2.5 py-1 rounded-xl ${
+              isSelected
+                ? 'bg-emerald-600 text-white ring-4 ring-emerald-600/30'
+                : isInsideRadius
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-500 text-slate-200'
+            } text-[11px] font-extrabold shadow-md whitespace-nowrap flex items-center gap-1.5 border border-white/30">
+              <span>₹${item.price}</span>
+              ${
+                typeof item.distanceKm === 'number'
+                  ? `<span class="text-[9px] font-normal ${isSelected ? 'text-emerald-100' : 'text-emerald-400'}">${item.distanceKm.toFixed(1)}km</span>`
+                  : ''
+              }
+            </div>
+            <div class="w-2.5 h-2.5 ${
+              isSelected ? 'bg-emerald-600' : isInsideRadius ? 'bg-slate-900' : 'bg-slate-500'
+            } rotate-45 -mt-1 shadow-sm"></div>
+          </div>
+        `,
+        iconSize: [60, 36],
+        iconAnchor: [30, 36],
+      });
+
+      const marker = L.marker([item.coordinates.lat, item.coordinates.lng], {
+        icon: listingPinIcon,
+      }).addTo(markersGroup);
+
+      marker.on('click', () => {
+        setSelectedMapItem(item);
+        map.panTo([item.coordinates.lat, item.coordinates.lng]);
+      });
+    });
+  }, [filteredListings, selectedMapItem, appliedDiscoveryRadius]);
+
+  const handleCenterOnUser = () => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.setView(
+        [userLocation.latitude, userLocation.longitude],
+        appliedLocalityType === 'VILLAGE' ? 12 : 13
+      );
+    }
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {/* Top Controls Bar — Wireframe Layout */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+      {/* Top Header & View Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Map View</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Interactive Map</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+              LIVE RADAR
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Discover active surplus pickups across Bangalore on the interactive map
+            Real-time geospatial visualization of surplus listings within your authorized {appliedLocalityType} radius ({appliedDiscoveryRadius} km)
           </p>
         </div>
 
         {/* Switch to List View */}
         <button
+          id="map-switch-to-list-btn"
           onClick={() => setActiveView('browse')}
           className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs transition-all flex items-center gap-2 self-start sm:self-auto cursor-pointer"
         >
           <List className="w-4 h-4 text-emerald-600" />
-          <span>List View</span>
+          <span>Switch to List View</span>
         </button>
       </div>
 
-      {/* Category Filter Pills (as shown in wireframe) */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 scrollbar-none">
-        {categories.map((cat) => {
-          const isSelected = selectedCategory === cat;
-          return (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-                isSelected
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50'
-              }`}
-            >
-              {cat}
-            </button>
-          );
-        })}
-      </div>
+      {/* Location Card Display */}
+      <LocationCard variant="compact" onOpenSearch={() => setIsLocationModalOpen(true)} />
 
-      {/* Map Container Canvas */}
-      <div className="relative w-full h-[520px] rounded-3xl overflow-hidden border border-slate-300/80 shadow-md bg-slate-100">
-        {/* SVG Interactive Map Grid & Vector Roads */}
-        <svg
-          viewBox="0 0 600 400"
-          className="w-full h-full object-cover bg-emerald-50/30"
-          style={{ transform: `scale(${zoomLevel / 14})`, transformOrigin: 'center' }}
-        >
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" strokeWidth="0.75" />
-            </pattern>
-          </defs>
-
-          {/* Map Base Grid */}
-          <rect width="600" height="400" fill="url(#grid)" />
-
-          {/* Green Parks / Areas */}
-          <path
-            d="M 50 40 Q 120 20 180 80 T 140 160 Q 60 140 50 40 Z"
-            fill="#dcfce7"
-            opacity="0.7"
-          />
-          <path
-            d="M 440 60 Q 520 40 560 120 T 480 180 Q 420 120 440 60 Z"
-            fill="#dcfce7"
-            opacity="0.7"
-          />
-          <path
-            d="M 260 260 Q 340 240 380 320 T 300 370 Q 240 320 260 260 Z"
-            fill="#dcfce7"
-            opacity="0.7"
-          />
-
-          {/* Major Highway Arteries */}
-          <path
-            d="M 0 180 Q 200 170 300 200 T 600 190"
-            fill="none"
-            stroke="#cbd5e1"
-            strokeWidth="8"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 0 180 Q 200 170 300 200 T 600 190"
-            fill="none"
-            stroke="#f8fafc"
-            strokeWidth="5"
-            strokeLinecap="round"
-          />
-
-          <path
-            d="M 280 0 Q 300 180 320 400"
-            fill="none"
-            stroke="#cbd5e1"
-            strokeWidth="8"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 280 0 Q 300 180 320 400"
-            fill="none"
-            stroke="#f8fafc"
-            strokeWidth="5"
-            strokeLinecap="round"
-          />
-
-          {/* Secondary Roads */}
-          <path d="M 120 0 L 140 400" fill="none" stroke="#e2e8f0" strokeWidth="4" />
-          <path d="M 460 0 L 440 400" fill="none" stroke="#e2e8f0" strokeWidth="4" />
-          <path d="M 0 90 L 600 100" fill="none" stroke="#e2e8f0" strokeWidth="4" />
-          <path d="M 0 310 L 600 300" fill="none" stroke="#e2e8f0" strokeWidth="4" />
-
-          {/* Area Text Labels */}
-          <text x="70" y="70" fill="#94a3b8" fontSize="10" fontWeight="600">
-            Cubbon Park
-          </text>
-          <text x="210" y="100" fill="#64748b" fontSize="11" fontWeight="700">
-            Indiranagar
-          </text>
-          <text x="360" y="130" fill="#64748b" fontSize="11" fontWeight="700">
-            Koramangala
-          </text>
-          <text x="390" y="220" fill="#64748b" fontSize="11" fontWeight="700">
-            HSR Layout
-          </text>
-          <text x="160" y="200" fill="#64748b" fontSize="11" fontWeight="700">
-            Jayanagar
-          </text>
-
-          {/* User Location Pulse Point (Blue Dot with Ring) */}
-          <g transform="translate(320, 210)">
-            <circle cx="0" cy="0" r="14" fill="#38bdf8" opacity="0.3" className="animate-ping" />
-            <circle cx="0" cy="0" r="7" fill="#0284c7" stroke="white" strokeWidth="2" />
-            <text x="12" y="4" fill="#0369a1" fontSize="9" fontWeight="bold">
-              You are here
-            </text>
-          </g>
-
-          {/* Render Active Surplus Store Pin Markers (Wireframe style) */}
-          {listings.map((item) => {
-            const pos = pinPositions[item.id] || { x: 300, y: 200 };
-            const isSelected = selectedMapItem?.id === item.id;
-
+      {/* Category Filter Pills */}
+      <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex items-center gap-1.5">
+          {categories.map((cat) => {
+            const isSelected = selectedCategory === cat;
             return (
-              <g
-                key={item.id}
-                transform={`translate(${pos.x}, ${pos.y})`}
-                onClick={() => setSelectedMapItem(item)}
-                className="cursor-pointer group"
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                  isSelected
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50'
+                }`}
               >
-                {/* Pin Head */}
-                <circle
-                  cx="0"
-                  cy="0"
-                  r={isSelected ? '14' : '11'}
-                  fill={isSelected ? '#15803d' : '#16a34a'}
-                  stroke="white"
-                  strokeWidth="2.5"
-                  className="transition-all drop-shadow-md group-hover:scale-110"
-                />
-                <circle cx="0" cy="0" r="4" fill="white" />
-
-                {/* Floating Store Pill Tag */}
-                <rect
-                  x="-45"
-                  y="-34"
-                  width="90"
-                  height="18"
-                  rx="9"
-                  fill="white"
-                  stroke={isSelected ? '#15803d' : '#cbd5e1'}
-                  strokeWidth="1.5"
-                  className="drop-shadow-xs"
-                />
-                <text
-                  x="0"
-                  y="-22"
-                  fill="#0f172a"
-                  fontSize="8.5"
-                  fontWeight="bold"
-                  textAnchor="middle"
-                >
-                  {item.storeName.length > 13 ? item.storeName.slice(0, 12) + '…' : item.storeName}
-                </text>
-                <text
-                  x="0"
-                  y="-12"
-                  fill="#16a34a"
-                  fontSize="7"
-                  fontWeight="600"
-                  textAnchor="middle"
-                >
-                  {item.distanceKm} km
-                </text>
-              </g>
+                {cat}
+              </button>
             );
           })}
-        </svg>
-
-        {/* Map UI Floating Controls */}
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-20">
-          <button
-            onClick={() => setZoomLevel((z) => Math.min(18, z + 1))}
-            className="w-8 h-8 rounded-xl bg-white text-slate-700 shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setZoomLevel((z) => Math.max(10, z - 1))}
-            className="w-8 h-8 rounded-xl bg-white text-slate-700 shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setZoomLevel(14)}
-            className="w-8 h-8 rounded-xl bg-white text-emerald-600 shadow-md flex items-center justify-center hover:bg-slate-50 transition-colors"
-            title="Recenter"
-          >
-            <Crosshair className="w-4 h-4" />
-          </button>
         </div>
 
-        {/* Floating Selected Store Card at Bottom — Wireframe Exact Match */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowRadiusBoundary(!showRadiusBoundary)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 ${
+              showRadiusBoundary
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-white text-slate-600 border-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{showRadiusBoundary ? `${appliedDiscoveryRadius}km Boundary On` : 'Boundary Off'}</span>
+          </button>
+
+          <button
+            onClick={handleCenterOnUser}
+            className="p-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs transition-all"
+            title="Center on my location"
+          >
+            <Crosshair className="w-4 h-4 text-emerald-600" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Leaflet Map Stage */}
+      <div className="relative w-full h-[540px] rounded-3xl overflow-hidden border border-slate-300 shadow-md bg-slate-100">
+        {/* Leaflet map DOM node */}
+        <div id="leaflet-map-canvas" ref={mapContainerRef} className="w-full h-full z-0" />
+
+        {/* Selected Item Bottom Card Preview (Floating inside Map) */}
         {selectedMapItem && (
-          <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-auto sm:w-96 z-20 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-slate-200/90 animate-in slide-in-from-bottom-2 duration-200">
-            <div className="flex items-center gap-3.5">
-              <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 relative">
-                <img
-                  src={selectedMapItem.image}
-                  alt={selectedMapItem.title}
-                  className="w-full h-full object-cover"
-                />
-                <span className="absolute bottom-0 right-0 px-1.5 py-0.5 rounded-tl-md bg-emerald-600 text-white text-[9px] font-extrabold">
-                  -{selectedMapItem.discountPercentage}%
-                </span>
-              </div>
+          <div className="absolute bottom-4 left-4 right-4 sm:right-auto sm:max-w-md z-10 animate-in fade-in slide-in-from-bottom-2 duration-150">
+            <div className="bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-xl p-4 flex gap-3.5">
+              <img
+                src={selectedMapItem.imageUrl}
+                alt={selectedMapItem.title}
+                referrerPolicy="no-referrer"
+                className="w-20 h-20 rounded-xl object-cover shrink-0 border border-slate-100"
+              />
 
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-emerald-600 uppercase">
-                  Near You • {selectedMapItem.distanceKm} km away
+              <div className="min-w-0 flex-1 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                      {selectedMapItem.category}
+                    </span>
+                    {typeof selectedMapItem.distanceKm === 'number' && (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-bold">
+                        {selectedMapItem.distanceKm.toFixed(1)} km away
+                      </span>
+                    )}
+                  </div>
+
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate mt-0.5">
+                    {selectedMapItem.title}
+                  </h4>
+
+                  <p className="text-[11px] text-slate-500 truncate flex items-center gap-1 mt-0.5">
+                    <Store className="w-3 h-3 text-slate-400" />
+                    <span>{selectedMapItem.storeName}</span>
+                  </p>
                 </div>
-                <h4 className="text-xs font-bold text-slate-900 truncate">
-                  {selectedMapItem.title}
-                </h4>
-                <div className="text-[11px] text-slate-500 truncate">{selectedMapItem.storeName}</div>
 
-                <div className="flex items-center justify-between mt-1">
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-sm font-extrabold text-slate-900">
-                      ₹{selectedMapItem.price}
-                    </span>
-                    <span className="text-[10px] text-slate-400 line-through">
-                      ₹{selectedMapItem.originalPrice}
-                    </span>
+                    <span className="text-sm font-extrabold text-emerald-700">₹{selectedMapItem.price}</span>
+                    <span className="text-[11px] text-slate-400 line-through">₹{selectedMapItem.originalPrice}</span>
                   </div>
 
                   <button
                     onClick={() => {
                       setSelectedListing(selectedMapItem);
-                      setActiveView('listing-detail');
+                      setActiveView('browse');
                     }}
-                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-colors"
                   >
-                    View Details
+                    <span>View Deal</span>
+                    <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
               </div>

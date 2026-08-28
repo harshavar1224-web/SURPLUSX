@@ -6,6 +6,9 @@ import {
   classifyServerLocality,
   calculateHaversineDistanceKm,
   verifyServerOrderDistanceEligibility,
+  serverReverseGeocode,
+  searchIndiaLocations,
+  isWithinIndia,
 } from './src/server/locationEngine';
 import { INITIAL_LISTINGS } from './src/data/mockData';
 import { UserRole, LocationRadiusPolicyType, LocalityType } from './src/types';
@@ -25,10 +28,10 @@ async function startServer() {
 
   // 1. Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'SurplusX Geo-Radius & Marketplace Engine' });
+    res.json({ status: 'ok', service: 'SurplusX India-Wide Location & Marketplace Engine' });
   });
 
-  // 2. GET /api/location/policy - Load active platform discovery and logistics radius policies
+  // 2. GET /api/location/policy - Load active platform discovery and logistics radius policies (Specification #12, #32, #33)
   app.get('/api/location/policy', (req, res) => {
     const policies = serverPolicyStore.getAllPolicies();
     res.json({
@@ -38,7 +41,100 @@ async function startServer() {
     });
   });
 
-  // 3. GET /api/location/classification - Classify coordinates into Locality Type (Village/Town/City)
+  // 3. GET /api/location/reverse-geocode - Reverse Geocode Lat/Lng into Complete Address (Specification #4, #7, #8-11, #35)
+  app.get('/api/location/reverse-geocode', async (req, res) => {
+    const lat = parseFloat(req.query.lat as string);
+    const lng = parseFloat(req.query.lng as string);
+    const accuracy = parseFloat(req.query.accuracy as string) || 15;
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid coordinates: lat and lng are required numbers',
+      });
+    }
+
+    // Check India Boundary (Specification #3)
+    if (!isWithinIndia(lat, lng)) {
+      return res.status(400).json({
+        success: false,
+        error: 'SurplusX is currently available only in supported areas of India.',
+        isWithinSupportedArea: false,
+      });
+    }
+
+    try {
+      const geoResult = await serverReverseGeocode(lat, lng, accuracy);
+      const appliedPolicy = serverPolicyStore.getPolicy('DISCOVERY_RADIUS', geoResult.localityType);
+
+      const userLocation = {
+        id: `loc-geo-${Date.now()}`,
+        userId: (req.query.userId as string) || 'guest',
+        latitude: lat,
+        longitude: lng,
+        accuracy,
+        formattedAddress: geoResult.formattedAddress,
+        houseNumber: geoResult.houseNumber,
+        street: geoResult.street,
+        area: geoResult.area,
+        village: geoResult.village,
+        town: geoResult.town,
+        city: geoResult.city,
+        district: geoResult.district,
+        state: geoResult.state,
+        stateCode: geoResult.stateCode,
+        postalCode: geoResult.postalCode,
+        country: geoResult.country,
+        countryCode: geoResult.countryCode,
+        localityType: geoResult.localityType,
+        localityName: geoResult.localityName,
+        source: 'GPS' as const,
+        isCurrent: true,
+        isLiveGps: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        pincode: geoResult.postalCode,
+      };
+
+      res.json({
+        success: true,
+        location: userLocation,
+        appliedPolicy: {
+          policyType: appliedPolicy.policyType,
+          radiusKm: appliedPolicy.radiusKm,
+          localityType: geoResult.localityType,
+          version: appliedPolicy.version,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: err.message || 'Geocoding failed',
+      });
+    }
+  });
+
+  // 4. GET /api/location/search - Search Place, City, Town, Village, District, or PIN Code across India (Specification #18, #19, #20)
+  app.get('/api/location/search', async (req, res) => {
+    const q = (req.query.q as string) || '';
+
+    try {
+      const results = await searchIndiaLocations(q);
+      res.json({
+        success: true,
+        query: q,
+        count: results.length,
+        results,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: err.message || 'Location search failed',
+      });
+    }
+  });
+
+  // 5. GET /api/location/classification - Classify coordinates into Locality Type (Village/Town/City/Metro)
   app.get('/api/location/classification', (req, res) => {
     const lat = parseFloat(req.query.lat as string);
     const lng = parseFloat(req.query.lng as string);
@@ -47,6 +143,13 @@ async function startServer() {
       return res.status(400).json({
         success: false,
         error: 'Invalid or missing coordinates (lat, lng required)',
+      });
+    }
+
+    if (!isWithinIndia(lat, lng)) {
+      return res.status(400).json({
+        success: false,
+        error: 'SurplusX is currently available only in supported areas of India.',
       });
     }
 
@@ -67,9 +170,9 @@ async function startServer() {
     });
   });
 
-  // 4. POST /api/location/manual - Register a user-selected manual location and resolve locality classification
-  app.post('/api/location/manual', (req, res) => {
-    const { lat, lng, localityName, userId } = req.body;
+  // 6. POST /api/location/manual - Register a user-selected manual location and resolve locality classification
+  app.post('/api/location/manual', async (req, res) => {
+    const { lat, lng, localityName, formattedAddress, postalCode, district, state, userId } = req.body;
 
     if (typeof lat !== 'number' || typeof lng !== 'number') {
       return res.status(400).json({
@@ -78,27 +181,50 @@ async function startServer() {
       });
     }
 
+    if (!isWithinIndia(lat, lng)) {
+      return res.status(400).json({
+        success: false,
+        error: 'SurplusX is currently available only in supported areas of India.',
+      });
+    }
+
+    const geoResult = await serverReverseGeocode(lat, lng, 20);
     const classification = classifyServerLocality(lat, lng);
+
     const userLocation = {
-      id: `loc-${Date.now()}`,
+      id: `loc-man-${Date.now()}`,
       userId: userId || 'guest',
       latitude: lat,
       longitude: lng,
-      accuracy: 10,
+      accuracy: 20,
+      formattedAddress: formattedAddress || geoResult.formattedAddress,
+      houseNumber: geoResult.houseNumber,
+      street: geoResult.street,
+      area: geoResult.area,
+      village: geoResult.village,
+      town: geoResult.town,
+      city: geoResult.city,
+      district: district || geoResult.district || classification.district,
+      state: state || geoResult.state || classification.state,
+      stateCode: geoResult.stateCode,
+      postalCode: postalCode || geoResult.postalCode,
+      country: 'India',
+      countryCode: 'in',
+      localityType: geoResult.localityType || classification.localityType,
+      localityName: localityName || geoResult.localityName || classification.localityName,
       source: 'MANUAL' as const,
-      localityType: classification.localityType,
-      localityName: localityName || classification.localityName,
-      district: classification.district,
-      state: classification.state,
-      updatedAt: new Date().toISOString(),
+      isCurrent: true,
       isLiveGps: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      pincode: postalCode || geoResult.postalCode,
     };
 
     if (userId) {
       serverPolicyStore.cacheUserLocation(userId, userLocation);
     }
 
-    const appliedPolicy = serverPolicyStore.getPolicy('DISCOVERY_RADIUS', classification.localityType);
+    const appliedPolicy = serverPolicyStore.getPolicy('DISCOVERY_RADIUS', userLocation.localityType);
 
     res.json({
       success: true,
@@ -107,6 +233,59 @@ async function startServer() {
         policyType: appliedPolicy.policyType,
         radiusKm: appliedPolicy.radiusKm,
         version: appliedPolicy.version,
+      },
+    });
+  });
+
+  // 7. GET /api/location/me - Get active user location
+  app.get('/api/location/me', (req, res) => {
+    const userId = (req.query.userId as string) || 'guest';
+    const cached = serverPolicyStore.getCachedUserLocation(userId);
+
+    if (cached) {
+      const policy = serverPolicyStore.getPolicy('DISCOVERY_RADIUS', cached.localityType);
+      return res.json({
+        success: true,
+        location: cached,
+        appliedPolicy: {
+          radiusKm: policy.radiusKm,
+          localityType: cached.localityType,
+        },
+      });
+    }
+
+    // Default: Hyderabad Tech Hub or Bangalore Central
+    const defaultLocation = {
+      id: 'loc-default',
+      userId,
+      latitude: 17.4483,
+      longitude: 78.3915,
+      accuracy: 25,
+      formattedAddress: 'Main Road, Madhapur, Hyderabad, Telangana 500081, India',
+      area: 'Madhapur',
+      city: 'Hyderabad',
+      district: 'Hyderabad',
+      state: 'Telangana',
+      postalCode: '500081',
+      country: 'India',
+      countryCode: 'in',
+      localityType: 'METRO' as const,
+      localityName: 'Madhapur (Hyderabad Metro)',
+      source: 'MANUAL' as const,
+      isCurrent: true,
+      isLiveGps: false,
+      updatedAt: new Date().toISOString(),
+      pincode: '500081',
+    };
+
+    const policy = serverPolicyStore.getPolicy('DISCOVERY_RADIUS', 'METRO');
+
+    res.json({
+      success: true,
+      location: defaultLocation,
+      appliedPolicy: {
+        radiusKm: policy.radiusKm,
+        localityType: 'METRO',
       },
     });
   });
@@ -184,6 +363,38 @@ async function startServer() {
       totalOutside: outsideListings.length,
       listings: includeOutside ? filtered : eligibleListings,
       outsideListings: includeOutside ? outsideListings : undefined,
+    });
+  });
+
+  // 9. POST /api/location/validate-order - Authoritative check before checkout or reservation
+  app.post('/api/location/validate-order', (req, res) => {
+    const { listingId, userCoordinates, policyType = 'DISCOVERY_RADIUS' } = req.body;
+
+    if (!listingId || !userCoordinates || typeof userCoordinates.lat !== 'number' || typeof userCoordinates.lng !== 'number') {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters: listingId and userCoordinates (lat, lng)',
+      });
+    }
+
+    const listing = serverListings.find((l) => l.id === listingId);
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        error: `Listing ${listingId} not found`,
+      });
+    }
+
+    const verification = verifyServerOrderDistanceEligibility({
+      userCoordinates,
+      listingCoordinates: listing.coordinates,
+      listingId,
+      policyType,
+    });
+
+    res.json({
+      success: true,
+      verification,
     });
   });
 

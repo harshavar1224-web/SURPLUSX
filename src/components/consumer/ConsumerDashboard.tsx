@@ -22,6 +22,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { LocationCard } from '../location/LocationCard';
 
 export const ConsumerDashboard: React.FC = () => {
   const {
@@ -43,6 +44,9 @@ export const ConsumerDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Center Main Dashboard Area */}
         <div className="lg:col-span-8 space-y-6">
+          {/* Authoritative Live Location & Radius Card */}
+          <LocationCard variant="full" />
+
           {/* Welcome Header */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>

@@ -52,7 +52,7 @@ export const AdminDashboard: React.FC = () => {
     else if (activeView === 'settlements' || activeView === 'payments' || activeView === 'ledger') setActiveTab('ledger');
     else if (activeView === 'audit-logs' || activeView === 'audit') setActiveTab('audit');
     else if (activeView === 'reports' || activeView === 'fraud' || activeView === 'disputes') setActiveTab('fraud');
-    else if (activeView === 'system-settings' || activeView === 'location') setActiveTab('location');
+    else if (activeView === 'system-settings' || activeView === 'location' || activeView === 'location-settings') setActiveTab('location');
   }, [activeView]);
 
   const [fraudSignals, setFraudSignals] = useState<any[]>([

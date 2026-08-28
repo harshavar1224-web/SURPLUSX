@@ -36,6 +36,7 @@ import {
   Users2,
   Building2,
   Leaf,
+  MapPin,
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -116,6 +117,7 @@ export const ADMIN_NAV: NavItemConfig[] = [
   { id: 'a-impact', label: 'Impact', icon: Leaf, view: 'impact', category: 'MAIN' },
   { id: 'a-analytics', label: 'Analytics', icon: BarChart3, view: 'analytics', category: 'OPERATIONS' },
   { id: 'a-verification', label: 'Verification', icon: FileCheck2, view: 'verification', badgeKey: 'verifications', category: 'SYSTEM' },
+  { id: 'a-location', label: 'Location & Radius Rules', icon: MapPin, view: 'location-settings', category: 'SYSTEM' },
   { id: 'a-reports', label: 'Reports & Fraud', icon: ShieldAlert, view: 'reports', badgeKey: 'fraud', category: 'SYSTEM' },
   { id: 'a-audit', label: 'Audit Logs', icon: Database, view: 'audit-logs', category: 'SYSTEM' },
   { id: 'a-settings', label: 'System Settings', icon: Sliders, view: 'system-settings', category: 'SYSTEM' },
