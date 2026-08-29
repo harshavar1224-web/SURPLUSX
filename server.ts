@@ -10,6 +10,13 @@ import {
   searchIndiaLocations,
   isWithinIndia,
 } from './src/server/locationEngine';
+import {
+  serverAccountService,
+  normalizeEmail,
+  normalizeIndianPhone,
+} from './src/server/accountIdentityService';
+import { phoneVerificationService } from './src/server/phoneVerificationService';
+import { emailVerificationService } from './src/server/emailVerificationService';
 import { INITIAL_LISTINGS } from './src/data/mockData';
 import { UserRole, LocationRadiusPolicyType, LocalityType } from './src/types';
 
@@ -591,6 +598,441 @@ async function startServer() {
       verification,
       expiresInMinutes: 15,
       message: 'Reservation lock secured successfully within platform radius policy.',
+    });
+  });
+
+  // ============================================================================
+  // STRICT ACCOUNT IDENTITY & DUAL-VERIFICATION API ROUTES
+  // Rule: ONE VERIFIED EMAIL + ONE VERIFIED E.164 MOBILE (+91) = ONE SURPLUSX ACCOUNT = ONE ROLE
+  // ============================================================================
+
+  // 11. POST /api/auth/check-availability - Pre-signup identity & conflict check (Specification #1-7, #34, #35)
+  app.post('/api/auth/check-availability', async (req, res) => {
+    try {
+      const { email, phone, role } = req.body;
+      const result = await serverAccountService.checkIdentityAvailability(email, phone, role);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Availability check failed' });
+    }
+  });
+
+  // 12. POST /api/auth/email/check - Authoritative RFC 5322, DNS MX Domain Check & User Table Lookup
+  app.post('/api/auth/email/check', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          valid: false,
+          status: 'INVALID_FORMAT',
+          message: 'Email address is required.',
+          error: 'Email address is required.',
+        });
+      }
+      const check = await serverAccountService.checkEmailStatus(email);
+      res.json(check);
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        valid: false,
+        status: 'DOMAIN_INVALID',
+        message: 'Email check failed.',
+        error: err.message || 'Email check failed.',
+      });
+    }
+  });
+
+  // 13. POST /api/auth/email/send-verification & /api/auth/email/send-otp - Dispatch 6-Digit Verification Code to User Email
+  const handleSendEmailVerification = async (req: express.Request, res: express.Response) => {
+    try {
+      const { email, deviceId } = req.body;
+      const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'Email address is required.' });
+      }
+
+      const normEmail = emailVerificationService.normalizeEmail(email);
+
+      // Security check: Check if user is already registered with SurplusX
+      const existingUser = serverAccountService.findUserByEmail(normEmail);
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          error: 'This email is already registered with SurplusX. Please sign in instead.',
+          isRegistered: true,
+          status: 'REGISTERED',
+        });
+      }
+
+      const result = await emailVerificationService.sendVerificationEmail({
+        email: normEmail,
+        clientIp,
+        deviceId,
+      });
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Failed to dispatch email verification.' });
+    }
+  };
+
+  app.post('/api/auth/email/send-verification', handleSendEmailVerification);
+  app.post('/api/auth/email/send-otp', handleSendEmailVerification);
+
+  // 14. POST /api/auth/email/verify & /api/auth/email/verify-otp - Verify Email Code & Issue 15-Minute Token
+  const handleVerifyEmail = (req: express.Request, res: express.Response) => {
+    try {
+      const { sessionId, verification_session_id, email, code, otp } = req.body;
+      const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+      const submittedCode = code || otp;
+      if (!email || !submittedCode) {
+        return res.status(400).json({
+          success: false,
+          error: 'Both email address and 6-digit verification code are required.',
+        });
+      }
+
+      const result = emailVerificationService.verifyEmailCode({
+        sessionId: sessionId || verification_session_id,
+        verification_session_id: verification_session_id || sessionId,
+        email,
+        code: submittedCode,
+        otp: submittedCode,
+        clientIp,
+      });
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Verification failed.' });
+    }
+  };
+
+  app.post('/api/auth/email/verify', handleVerifyEmail);
+  app.post('/api/auth/email/verify-otp', handleVerifyEmail);
+
+  // 15. POST /api/auth/phone/lookup - Phone Number Intelligence & Risk Assessment (Specification #8, #9, #10, #11)
+  app.post('/api/auth/phone/lookup', (req, res) => {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'Mobile number is required.' });
+    }
+    const intelligence = phoneVerificationService.lookupPhone(phone);
+    res.json({
+      success: intelligence.valid && intelligence.reachable,
+      intelligence,
+    });
+  });
+
+  // 16. POST /api/auth/phone/send-otp - Dispatch 6-Digit Cryptographic OTP (Specification #16-24)
+  app.post('/api/auth/phone/send-otp', async (req, res) => {
+    const { phone, purpose = 'SIGNUP', deviceId } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'Mobile number is required to send verification code.' });
+    }
+
+    const result = await phoneVerificationService.sendOTP({
+      phone,
+      purpose,
+      clientIp,
+      deviceId,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 17. POST /api/auth/phone/verify-otp - Verify Cryptographic OTP & Issue 15-Minute One-Time Token (Specification #21-24)
+  app.post('/api/auth/phone/verify-otp', (req, res) => {
+    const { sessionId, phone, otpCode, purpose = 'SIGNUP' } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    if (!phone || !otpCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'Both mobile number and verification code are required.',
+      });
+    }
+
+    const result = phoneVerificationService.verifyOTP({
+      sessionId,
+      phone,
+      otpCode,
+      purpose,
+      clientIp,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 18. POST /api/auth/signup - Transactional Signup with Dual-Token Enforcement (Email Token + Phone Token) & Role Lock
+  app.post('/api/auth/signup', async (req, res) => {
+    const {
+      name,
+      email,
+      phone,
+      role,
+      emailVerificationToken,
+      phoneVerificationToken,
+      password,
+      city,
+      organizationName,
+      deviceId,
+    } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const result = await serverAccountService.transactionalSignup({
+      name,
+      email,
+      phone,
+      role,
+      emailVerificationToken,
+      phoneVerificationToken,
+      password,
+      city,
+      organizationName,
+      deviceId,
+      ipAddress: clientIp,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.status(201).json(result);
+  });
+
+  // 16. POST /api/auth/phone/change-request - Request Mobile Number Change (Specification #27)
+  app.post('/api/auth/phone/change-request', async (req, res) => {
+    const { userId, newPhone, deviceId } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    if (!userId || !newPhone) {
+      return res.status(400).json({ success: false, error: 'User ID and new mobile number are required.' });
+    }
+
+    const result = await serverAccountService.requestPhoneChange({
+      userId,
+      newPhone,
+      clientIp,
+      deviceId,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 17. POST /api/auth/phone/change-verify - Confirm Mobile Number Change with OTP (Specification #27)
+  app.post('/api/auth/phone/change-verify', async (req, res) => {
+    const { userId, newPhone, otpCode, sessionId, deviceId } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    if (!userId || !newPhone || !otpCode) {
+      return res.status(400).json({
+        success: false,
+        error: 'User ID, new mobile number, and OTP code are required.',
+      });
+    }
+
+    const result = await serverAccountService.verifyAndApplyPhoneChange({
+      userId,
+      newPhone,
+      otpCode,
+      sessionId,
+      clientIp,
+      deviceId,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 18. POST /api/auth/login - Authoritative Login (SERVER DETERMINES ROLE - NO ROLE SELECTOR ON LOGIN)
+  app.post('/api/auth/login', (req, res) => {
+    const { identifier, password, deviceId } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const result = serverAccountService.authenticateUser(identifier, password, deviceId, clientIp);
+
+    if (!result.success) {
+      return res.status(401).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 19. POST /api/auth/verify-email - Email Verification
+  app.post('/api/auth/verify-email', (req, res) => {
+    const { email } = req.body;
+    const norm = normalizeEmail(email);
+    const user = serverAccountService.findUserByEmail(norm);
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    user.emailVerified = true;
+    res.json({ success: true, message: `Email ${norm} verified successfully.` });
+  });
+
+  // 20. POST /api/auth/forgot-password - Recovery Initiation (Specification #25, #31)
+  app.post('/api/auth/forgot-password', (req, res) => {
+    const { identifier } = req.body;
+    const user = serverAccountService.findUserByIdentifier(identifier);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'No registered SurplusX account matches this email or mobile number.',
+      });
+    }
+
+    // In demo environment, return simulated OTP for immediate verification
+    const simulatedOtp = '8492';
+    res.json({
+      success: true,
+      message: `Recovery code sent to your registered contact. Use code ${simulatedOtp} to reset your password.`,
+      maskedTarget: user.email.replace(/(.{2})(.*)(?=@)/, (_g1, g2, g3) => g2 + '*'.repeat(g3.length)),
+      simulatedOtp,
+    });
+  });
+
+  // 21. POST /api/auth/reset-password - Complete Password Reset
+  app.post('/api/auth/reset-password', (req, res) => {
+    const { identifier, newPassword } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const result = serverAccountService.resetPassword(identifier, newPassword, clientIp);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 22. POST /api/admin/change-role - Authorized Administrative Role Migration (Specification #28, #29, #44)
+  app.post('/api/admin/change-role', async (req, res) => {
+    const { adminId, adminEmail, targetUserId, newRole, reason } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const result = await serverAccountService.adminChangeRole({
+      adminId,
+      adminEmail,
+      targetUserId,
+      newRole,
+      reason,
+      ipAddress: clientIp,
+    });
+
+    if (!result.success) {
+      return res.status(403).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 23. GET /api/admin/phone-blocks - List Blocked Mobile Numbers
+  app.get('/api/admin/phone-blocks', (req, res) => {
+    const blocked = phoneVerificationService.getBlockedNumbers();
+    res.json({
+      success: true,
+      count: blocked.length,
+      blocked,
+    });
+  });
+
+  // 24. POST /api/admin/phone-blocks - Block a phone number
+  app.post('/api/admin/phone-blocks', (req, res) => {
+    const { phone, reasonCode = 'SPAM', notes, createdBy = 'ADMIN_MANUAL', expiresInDays } = req.body;
+    const result = phoneVerificationService.blockNumber({
+      phone,
+      reasonCode,
+      notes,
+      createdBy,
+      expiresInDays,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 25. DELETE /api/admin/phone-blocks/:phone - Unblock a phone number
+  app.delete('/api/admin/phone-blocks/:phone', (req, res) => {
+    const { phone } = req.params;
+    const result = phoneVerificationService.unblockNumber(phone);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  });
+
+  // 26. POST /api/admin/phone-override - Admin Manual Verification Override
+  app.post('/api/admin/phone-override', async (req, res) => {
+    const { adminId, targetUserId, verifiedPhone, reason, evidenceReference } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const result = await serverAccountService.adminOverrideUserPhone({
+      adminId,
+      targetUserId,
+      verifiedPhone,
+      reason,
+      evidenceReference,
+      ipAddress: clientIp,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // 27. GET /api/admin/users - Admin Listing of Registered Identities & Role Locks
+  app.get('/api/admin/users', (req, res) => {
+    const users = serverAccountService.getAllAccounts();
+    res.json({
+      success: true,
+      count: users.length,
+      users,
+    });
+  });
+
+  // 28. GET /api/admin/identity-audit-logs - Identity & Role Audit Logs
+  app.get('/api/admin/identity-audit-logs', (req, res) => {
+    const logs = serverAccountService.getAuditLogs();
+    const roleChanges = serverAccountService.getAdminRoleChanges();
+    res.json({
+      success: true,
+      logs,
+      roleChanges,
     });
   });
 

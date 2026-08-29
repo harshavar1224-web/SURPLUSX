@@ -14,12 +14,21 @@ import {
   Sparkles,
   Flame,
   ChevronRight,
+  AlertCircle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SurplusListing } from '../../types';
 
 export const ListingDetailModal: React.FC = () => {
-  const { selectedListing, setSelectedListing, setActiveView, addToCart, toggleFavorite } = useApp();
+  const {
+    selectedListing,
+    setSelectedListing,
+    setActiveView,
+    addToCart,
+    toggleFavorite,
+    appliedDiscoveryRadius,
+    appliedLocalityType,
+  } = useApp();
   const [quantity, setQuantity] = useState(1);
 
   if (!selectedListing) {
@@ -195,17 +204,40 @@ export const ListingDetailModal: React.FC = () => {
               </div>
             </div>
 
+            {/* Mandatory Boundary Check Alert */}
+            {typeof item.distanceKm === 'number' && item.distanceKm > appliedDiscoveryRadius && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">Store Outside Surrounding Area</div>
+                  <div className="text-[11px] text-amber-700 mt-0.5">
+                    This store is {item.distanceKm} km away. Because SurplusX operates across India with mandatory local boundaries ({appliedDiscoveryRadius} km for {appliedLocalityType} areas), orders can only be placed from your verified surrounding area.
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Reserve CTA Bar */}
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => {
-                  addToCart(item, quantity);
-                  setActiveView('dashboard');
-                }}
-                className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Reserve Now (₹{totalPrice})</span>
-              </button>
+              {typeof item.distanceKm === 'number' && item.distanceKm > appliedDiscoveryRadius ? (
+                <button
+                  disabled
+                  className="flex-1 py-3.5 bg-slate-100 text-slate-400 font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2 cursor-not-allowed border border-slate-200"
+                >
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Outside Surrounding Boundary ({item.distanceKm} km)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    addToCart(item, quantity);
+                    setActiveView('dashboard');
+                  }}
+                  className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Reserve Now (₹{totalPrice})</span>
+                </button>
+              )}
             </div>
           </div>
 

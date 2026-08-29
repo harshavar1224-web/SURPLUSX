@@ -117,13 +117,47 @@ export const ProfileView: React.FC = () => {
         </div>
 
         {/* Security & Role Immutability Notice */}
-        <div className="mt-6 p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 flex items-start gap-3">
-          <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-900">
-            <p className="font-bold">Role is Strictly Enforced (Read-Only)</p>
-            <p className="mt-0.5 text-amber-800">
-              Account roles are tied to cryptographically verified credentials and KYC. Role changes (e.g. Consumer to Merchant or NGO) must undergo authoritative background verification via SurplusX Trust & Safety.
-            </p>
+        <div className="mt-6 p-4 rounded-2xl bg-amber-50/80 border border-amber-200/90 space-y-3">
+          <div className="flex items-start gap-3">
+            <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-900">
+              <p className="font-bold flex items-center gap-2">
+                <span>Strict Account Identity & Role Locking Policy</span>
+                <span className="bg-amber-200 text-amber-900 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                  Locked
+                </span>
+              </p>
+              <p className="mt-0.5 text-amber-800 leading-relaxed">
+                Under SurplusX nationwide policy (ONE EMAIL + ONE MOBILE + ONE ROLE), your role is permanently locked to this account. Role changes cannot be performed via self-service and require authorized SurplusX Trust & Safety administrator approval.
+              </p>
+            </div>
+          </div>
+
+          {/* Identity Anchors */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-amber-200/60 text-xs">
+            <div className="bg-white/80 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Email Anchor</div>
+                <div className="font-bold text-slate-800 truncate">{currentUser?.email}</div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Mobile Anchor</div>
+                <div className="font-bold text-slate-800 truncate">{currentUser?.phone}</div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600" />
+              <div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase">Assigned Role</div>
+                <div className="font-bold text-slate-800">{badge.label}</div>
+              </div>
+            </div>
           </div>
         </div>
 

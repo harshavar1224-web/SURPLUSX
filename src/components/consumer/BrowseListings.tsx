@@ -378,9 +378,9 @@ export const BrowseListings: React.FC = () => {
                               Within {appliedLocalityType} Radius
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-semibold border border-amber-200/50">
-                              <AlertCircle className="w-3 h-3" />
-                              Outside Area ({item.distanceKm} km &gt; {appliedDiscoveryRadius} km)
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-semibold border border-amber-200">
+                              <AlertCircle className="w-3 h-3 text-amber-600" />
+                              Outside Boundary ({item.distanceKm} km &gt; {appliedDiscoveryRadius} km)
                             </span>
                           )}
                         </div>
@@ -410,7 +410,7 @@ export const BrowseListings: React.FC = () => {
                       ) : (
                         <button
                           disabled
-                          title={`Cannot order: Outside ${appliedLocalityType} ${appliedDiscoveryRadius}km boundary`}
+                          title={`Cannot order: Outside mandatory ${appliedLocalityType} surrounding boundary (${appliedDiscoveryRadius} km)`}
                           className="px-3 py-1.5 bg-slate-100 text-slate-400 text-xs font-medium rounded-xl cursor-not-allowed"
                         >
                           Out of Area

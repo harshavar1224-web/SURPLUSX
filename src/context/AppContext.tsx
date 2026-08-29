@@ -28,7 +28,14 @@ import {
   ChatMessage,
   ConversationThread,
   SupportTicket,
+  AdminRoleChangeLog,
 } from '../types';
+import {
+  signupApi,
+  loginApi,
+  adminChangeRoleApi,
+  fetchAdminUsersApi,
+} from '../services/identityClient';
 import {
   calculateHaversineDistance,
   checkGeofence,
@@ -67,14 +74,30 @@ interface AppContextType {
   isAuthenticated: boolean;
   switchRole: (role: UserRole) => void;
   login: (user: User) => Promise<void>;
+  loginWithCredentials: (
+    identifier: string,
+    password?: string
+  ) => Promise<{ success: boolean; user?: User; error?: string; isDeviceMismatch?: boolean }>;
   signup: (
     name: string,
     email: string,
     role: 'CONSUMER' | 'BUSINESS' | 'NGO',
     phone?: string,
-    orgName?: string
-  ) => Promise<boolean>;
+    orgName?: string,
+    password?: string,
+    emailVerificationToken?: string,
+    phoneVerificationToken?: string
+  ) => Promise<{ success: boolean; user?: User; error?: string }>;
   logout: () => void;
+  adminChangeUserRole: (
+    targetUserId: string,
+    newRole: UserRole,
+    reason: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  allUsers: User[];
+  fetchRegisteredUsers: () => Promise<User[]>;
+  roleAuditLogs: AdminRoleChangeLog[];
+  fetchIdentityAuditLogs: () => Promise<void>;
   requireAuth: (intent?: PendingActionIntent) => boolean;
   canAccessView: (view: string) => boolean;
   pendingIntent: PendingActionIntent | null;
@@ -581,6 +604,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [deviceBinding] = useState<DeviceBinding>(INITIAL_DEVICE_BINDING);
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState<boolean>(false);
 
+  // Identity & Role Lock System State (Specification #1, #6, #7, #28, #35)
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [roleAuditLogs, setRoleAuditLogs] = useState<AdminRoleChangeLog[]>([]);
+
   // Modals & UI
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -1029,45 +1056,164 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActiveView('dashboard');
   };
 
-  // Signup handler (strictly rejects public admin creation)
+  // Authoritative Login (SERVER DETERMINES ROLE - NO ROLE SELECTOR ON LOGIN)
+  const loginWithCredentials = async (
+    identifier: string,
+    password?: string
+  ): Promise<{ success: boolean; user?: User; error?: string; isDeviceMismatch?: boolean }> => {
+    try {
+      const res = await loginApi({
+        identifier,
+        password,
+        deviceId: deviceBinding.deviceId,
+      });
+
+      if (!res.success || !res.user) {
+        triggerToast(res.error || 'Authentication failed.', 'warning');
+        return { success: false, error: res.error || 'Authentication failed.' };
+      }
+
+      await login(res.user);
+
+      if (res.isDeviceMismatch) {
+        setIsDeviceModalOpen(true);
+        triggerToast('Active device verification required for this session.', 'warning');
+      }
+
+      return { success: true, user: res.user, isDeviceMismatch: res.isDeviceMismatch };
+    } catch (err: any) {
+      const msg = err.message || 'Login failed. Please check your credentials.';
+      triggerToast(msg, 'warning');
+      return { success: false, error: msg };
+    }
+  };
+
+  // Fetch all registered users for Admin View
+  const fetchRegisteredUsers = async (): Promise<User[]> => {
+    try {
+      const users = await fetchAdminUsersApi();
+      setAllUsers(users);
+      return users;
+    } catch {
+      return [];
+    }
+  };
+
+  // Fetch identity and role audit logs
+  const fetchIdentityAuditLogs = async (): Promise<void> => {
+    try {
+      const res = await fetch('/api/admin/identity-audit-logs');
+      const data = await res.json();
+      if (data.roleChanges) {
+        setRoleAuditLogs(data.roleChanges);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchRegisteredUsers();
+    fetchIdentityAuditLogs();
+  }, []);
+
+  // Transactional Signup handler with Authoritative Server Validation
   const signup = async (
     name: string,
     email: string,
     role: 'CONSUMER' | 'BUSINESS' | 'NGO',
     phone?: string,
-    orgName?: string
-  ): Promise<boolean> => {
+    orgName?: string,
+    password?: string,
+    emailVerificationToken?: string,
+    phoneVerificationToken?: string
+  ): Promise<{ success: boolean; user?: User; error?: string }> => {
     if ((role as string) === 'ADMIN') {
-      triggerToast('Administrator accounts cannot be created via public signup.', 'warning');
-      return false;
+      const err = 'Administrator accounts cannot be created via public signup.';
+      triggerToast(err, 'warning');
+      return { success: false, error: err };
     }
 
-    const newUser: User = {
-      id: `usr-${Date.now().toString(36)}`,
-      name,
-      email,
-      phone: phone || '+91 98450 12345',
-      role,
-      city: selectedCity,
-      organizationName:
-        orgName ||
-        (role === 'BUSINESS'
-          ? `${name}'s Surplus Store`
-          : role === 'NGO'
-          ? `${name} Care Foundation`
-          : undefined),
-      isVerified: true,
-      joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      avatarUrl:
-        role === 'CONSUMER'
-          ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80'
-          : role === 'BUSINESS'
-          ? 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=200&q=80'
-          : 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=200&q=80',
-    };
+    try {
+      const res = await signupApi({
+        name,
+        email,
+        phone: phone || '',
+        role,
+        emailVerificationToken,
+        phoneVerificationToken,
+        password: password || 'surplusx_pass_123',
+        city: selectedCity,
+        organizationName: orgName,
+        deviceId: deviceBinding.deviceId,
+      });
 
-    await login(newUser);
-    return true;
+      if (!res.success || !res.user) {
+        const errMsg = res.error || 'Failed to create SurplusX account.';
+        triggerToast(errMsg, 'warning');
+        return { success: false, error: errMsg };
+      }
+
+      await login(res.user);
+      await fetchRegisteredUsers();
+      await fetchIdentityAuditLogs();
+      triggerToast(`Account created successfully! Welcome to SurplusX as ${res.user.role}.`, 'success');
+      return { success: true, user: res.user };
+    } catch (err: any) {
+      const msg = err.message || 'Account registration failed. Please try again.';
+      triggerToast(msg, 'warning');
+      return { success: false, error: msg };
+    }
+  };
+
+  // Authorized Administrative Role Migration (Specification #28, #29, #44)
+  const adminChangeUserRole = async (
+    targetUserId: string,
+    newRole: UserRole,
+    reason: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (currentUser?.role !== 'ADMIN') {
+      const err = 'Unauthorized: Administrative credentials required to change user roles.';
+      triggerToast(err, 'warning');
+      return { success: false, error: err };
+    }
+
+    try {
+      const res = await adminChangeRoleApi({
+        adminId: currentUser.id,
+        adminEmail: currentUser.email,
+        targetUserId,
+        newRole,
+        reason,
+      });
+
+      if (!res.success) {
+        triggerToast(res.error || 'Failed to update user role.', 'warning');
+        return { success: false, error: res.error };
+      }
+
+      await fetchRegisteredUsers();
+      await fetchIdentityAuditLogs();
+
+      if (res.auditLog) {
+        setRoleAuditLogs((prev) => [res.auditLog!, ...prev]);
+      }
+
+      // If updating currently logged in user
+      if (currentUser.id === targetUserId && res.user) {
+        setCurrentUser(res.user);
+      }
+
+      triggerToast(`Successfully migrated account to ${newRole}. Action logged in audit ledger.`, 'success');
+      addAuditLog(
+        'ADMIN_ROLE_CHANGE_EXECUTED',
+        'AUTH',
+        `Admin changed role of user ${targetUserId} to ${newRole}. Reason: ${reason}`
+      );
+      return { success: true };
+    } catch (err: any) {
+      const msg = err.message || 'Error executing administrative role migration.';
+      triggerToast(msg, 'warning');
+      return { success: false, error: msg };
+    }
   };
 
   // Logout handler
@@ -1081,13 +1227,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     triggerToast('You have been signed out. Browsing as Guest.', 'info');
   };
 
-  // Role switching with strict isolation view resetting (for demo/testing)
+  // Role switching: Guarded for testing persona preview
   const switchRole = (role: UserRole) => {
     const newUser = roleUsers[role];
     setCurrentUser(newUser);
     setActiveView('dashboard');
-    triggerToast(`Switched to ${role} Mode (${newUser.name})`, 'info');
-    addAuditLog(`USER_ROLE_SWITCH_${role}`, 'AUTH', `User switched session profile to ${role} (${newUser.email}).`);
+    triggerToast(`Active Session Role: ${role} (${newUser.name})`, 'info');
+    addAuditLog(`USER_ROLE_SWITCH_${role}`, 'AUTH', `Switched session identity to ${role} (${newUser.email}).`);
   };
 
   // Recalculate listing distances relative to user coordinates
@@ -1360,8 +1506,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       policyType: 'DISCOVERY_RADIUS',
       listingId,
       message: allowed
-        ? `Eligible: ${dist} km away (within ${appliedLocalityType} ${appliedDiscoveryRadius} km radius)`
-        : `This listing is ${dist} km away and outside your current delivery/pickup area (${appliedDiscoveryRadius} km radius).`,
+        ? `Eligible: ${dist} km away (within your surrounding ${appliedLocalityType} ${appliedDiscoveryRadius} km radius)`
+        : `This listing is ${dist} km away and outside your mandatory surrounding delivery/pickup area (${appliedDiscoveryRadius} km radius).`,
     };
   };
 
@@ -1379,7 +1525,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  // Cart operations with authoritative distance validation
+  // Cart operations with authoritative mandatory distance validation
   const addToCart = (listing: SurplusListing, quantity = 1) => {
     if (!currentUser) {
       requireAuth({
@@ -1391,11 +1537,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
 
-    // Strict Distance Verification
+    // Strict Distance Verification - orders restricted to local surroundings across India
     const verification = verifyDistanceEligibility(listing.coordinates, listing.id);
     if (!verification.allowed) {
       triggerToast(
-        `Cannot add to cart: This listing is ${verification.userDistanceKm} km away, which is outside your ${appliedLocalityType} ${appliedDiscoveryRadius} km discovery radius.`,
+        `Cannot order: ${listing.title} is ${verification.userDistanceKm} km away. Orders are strictly restricted to your surrounding ${appliedLocalityType} boundary (${appliedDiscoveryRadius} km).`,
         'warning'
       );
       return;
@@ -1451,10 +1597,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const check = verifyDistanceEligibility(item.listing.coordinates, item.listing.id);
       if (!check.allowed) {
         triggerToast(
-          `Order blocked: ${item.listing.title} is outside your current delivery/pickup area (${check.userDistanceKm} km > ${appliedDiscoveryRadius} km).`,
+          `Order blocked: ${item.listing.title} is outside your surrounding area (${check.userDistanceKm} km > ${appliedDiscoveryRadius} km).`,
           'warning'
         );
-        throw new Error('Listing outside authorized radius');
+        throw new Error('Listing outside authorized surrounding radius');
       }
     }
 
@@ -2173,8 +2319,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isAuthenticated,
         switchRole,
         login,
+        loginWithCredentials,
         signup,
         logout,
+        adminChangeUserRole,
+        allUsers,
+        fetchRegisteredUsers,
+        roleAuditLogs,
+        fetchIdentityAuditLogs,
         requireAuth,
         canAccessView,
         pendingIntent,

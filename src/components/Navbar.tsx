@@ -8,6 +8,7 @@ import {
   ChevronDown,
   User,
   LogOut,
+  Building,
   Building2,
   HeartHandshake,
   ShieldAlert,
@@ -501,9 +502,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-500 truncate mt-0.5">{currentUser.email}</div>
+                      {currentUser.phone && (
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center justify-between">
+                          <span>{currentUser.phone}</span>
+                          <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                            Role Locked
+                          </span>
+                        </div>
+                      )}
                       <div className="mt-1.5 flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>Verified Account • {currentUser.city}</span>
+                        <span>Verified 1:1 Identity • {currentUser.city}</span>
                       </div>
                     </div>
 
@@ -511,11 +520,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
                       <button
                         onClick={() => {
                           setIsRoleDropdownOpen(false);
-                          setActiveView('dashboard');
+                          setActiveView('profile');
                         }}
                         className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-emerald-700 rounded-xl flex items-center gap-2.5 transition-colors"
                       >
                         <User className="w-4 h-4 text-slate-400" />
+                        <span>My Profile & Role Details</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setIsRoleDropdownOpen(false);
+                          setActiveView('dashboard');
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-emerald-700 rounded-xl flex items-center gap-2.5 transition-colors"
+                      >
+                        <Building className="w-4 h-4 text-slate-400" />
                         <span>My Dashboard</span>
                       </button>
 

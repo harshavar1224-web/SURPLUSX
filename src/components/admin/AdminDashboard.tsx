@@ -21,6 +21,8 @@ import {
 import { useApp } from '../../context/AppContext';
 import { NGO, AuditLog, LedgerEntry } from '../../types';
 import { LocationSettingsTab } from './LocationSettingsTab';
+import { IdentityManagementTab } from './IdentityManagementTab';
+import { Users } from 'lucide-react';
 
 interface MockVerificationDoc {
   id: string;
@@ -44,10 +46,11 @@ export const AdminDashboard: React.FC = () => {
     addAuditLog,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'verifications' | 'fleet' | 'ledger' | 'audit' | 'disputes' | 'fraud' | 'location'>('verifications');
+  const [activeTab, setActiveTab] = useState<'verifications' | 'fleet' | 'ledger' | 'audit' | 'disputes' | 'fraud' | 'location' | 'identities'>('verifications');
 
   useEffect(() => {
-    if (activeView === 'verification' || activeView === 'users' || activeView === 'businesses' || activeView === 'ngos') setActiveTab('verifications');
+    if (activeView === 'users' || activeView === 'identities') setActiveTab('identities');
+    else if (activeView === 'verification' || activeView === 'businesses' || activeView === 'ngos') setActiveTab('verifications');
     else if (activeView === 'live-logistics' || activeView === 'fleet') setActiveTab('fleet');
     else if (activeView === 'settlements' || activeView === 'payments' || activeView === 'ledger') setActiveTab('ledger');
     else if (activeView === 'audit-logs' || activeView === 'audit') setActiveTab('audit');
@@ -280,6 +283,18 @@ export const AdminDashboard: React.FC = () => {
         >
           <MapPin className="w-3.5 h-3.5" />
           <span>Geo-Radius & Location Engine</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('identities')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+            activeTab === 'identities'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Strict Identities & Roles</span>
         </button>
 
         <button
@@ -577,6 +592,9 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Tab 5: Authoritative Geo-Radius & Location Engine Policy Management */}
       {activeTab === 'location' && <LocationSettingsTab />}
+
+      {/* Tab 7: Strict Identity & Role Protection Management */}
+      {activeTab === 'identities' && <IdentityManagementTab />}
 
       {/* Tab 6: Immutable Cryptographic Audit Ledger */}
       {activeTab === 'audit' && (

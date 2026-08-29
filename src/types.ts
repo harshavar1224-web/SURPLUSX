@@ -257,6 +257,165 @@ export interface Dispute {
   createdAt: string;
 }
 
+export type AccountStatus =
+  | 'PENDING_PHONE_VERIFICATION'
+  | 'PENDING_EMAIL_VERIFICATION'
+  | 'PENDING_BUSINESS_VERIFICATION'
+  | 'PENDING_NGO_VERIFICATION'
+  | 'ACTIVE'
+  | 'SUSPENDED'
+  | 'BLOCKED';
+
+export type EmailVerificationStatus =
+  | 'INVALID_FORMAT'
+  | 'DOMAIN_INVALID'
+  | 'DOMAIN_VALID'
+  | 'NOT_REGISTERED'
+  | 'VERIFICATION_REQUIRED'
+  | 'VERIFICATION_PENDING'
+  | 'VERIFICATION_SENT'
+  | 'DELIVERED'
+  | 'BOUNCED'
+  | 'FAILED'
+  | 'VERIFIED'
+  | 'REGISTERED';
+
+export type PhoneVerificationStatus =
+  | 'UNVERIFIED'
+  | 'PENDING'
+  | 'VERIFIED'
+  | 'INVALID'
+  | 'UNREACHABLE'
+  | 'HIGH_RISK'
+  | 'BLOCKED';
+
+export type PhoneLineStatus = 'ACTIVE' | 'REACHABLE' | 'UNREACHABLE' | 'INACTIVE' | 'UNKNOWN';
+
+export type PhoneStatusType =
+  | 'EMPTY'
+  | 'INVALID_FORMAT'
+  | 'VALID_FORMAT'
+  | 'LOOKUP_CHECKING'
+  | 'INVALID'
+  | 'INACTIVE'
+  | 'UNREACHABLE'
+  | 'UNKNOWN'
+  | 'LANDLINE'
+  | 'VOIP'
+  | 'MOBILE'
+  | 'OTP_REQUIRED'
+  | 'OTP_SENT'
+  | 'OTP_FAILED'
+  | 'VERIFIED'
+  | 'REGISTERED'
+  | 'AVAILABLE'
+  | 'HIGH_RISK'
+  | 'BLOCKED';
+
+export type PhoneRiskLevel = 'LOW_RISK' | 'MEDIUM_RISK' | 'HIGH_RISK' | 'BLOCKED';
+
+export type PhoneLineType = 'MOBILE' | 'VOIP' | 'LANDLINE' | 'DISPOSABLE' | 'TOLL_FREE' | 'PREMIUM' | 'UNKNOWN';
+
+export type OTPPurpose = 'SIGNUP' | 'LOGIN' | 'PHONE_CHANGE' | 'ACCOUNT_RECOVERY';
+
+export type BlockedPhoneReason = 'FRAUD' | 'ABUSE' | 'SPAM' | 'SECURITY' | 'LEGAL_REQUEST';
+
+export interface EmailVerificationSession {
+  id: string;
+  email: string;
+  normalizedEmail: string;
+  tokenHash: string;
+  expiresAt: string;
+  attempts: number;
+  maxAttempts: number;
+  resendAvailableAt: string;
+  verifiedAt?: string;
+  verificationToken?: string;
+  createdAt: string;
+  status: EmailVerificationStatus;
+  isDemoMode?: boolean;
+  demoVerificationCode?: string;
+}
+
+export interface EmailVerification {
+  id: string;
+  email: string;
+  userId?: string;
+  provider: 'RESEND' | 'SENDGRID' | 'AMAZON_SES' | 'POSTMARK' | 'SURPLUSX_TRANSACTIONAL';
+  domainStatus: 'VALID' | 'INVALID' | 'DNS_CHECK_FAILED';
+  deliveryStatus: 'DELIVERED' | 'BOUNCED' | 'FAILED' | 'PENDING';
+  verificationStatus: EmailVerificationStatus;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PhoneIntelligence {
+  valid: boolean;
+  reachable: boolean;
+  lineStatus: PhoneLineStatus;
+  carrier?: string;
+  country: string;
+  countryCode: string;
+  lineType: PhoneLineType;
+  prepaidOrPostpaid?: 'PREPAID' | 'POSTPAID' | 'UNKNOWN';
+  isDisposable: boolean;
+  isVoip: boolean;
+  riskLevel: PhoneRiskLevel;
+  riskScore: number; // 0 (safest) to 100 (highest risk)
+  normalizedPhone: string;
+  formattedDisplay: string;
+  maskedPhone: string;
+  reputationSignals?: string[];
+  safeErrorMessage?: string;
+}
+
+export interface PhoneVerification {
+  id: string;
+  userId?: string;
+  phone: string;
+  normalizedPhone: string;
+  provider: 'TWILIO_VERIFY' | 'TELECOM_DIRECT' | 'SURPLUSX_SECURE_GATEWAY';
+  verificationStatus: PhoneVerificationStatus;
+  riskLevel: PhoneRiskLevel;
+  carrier?: string;
+  lineType: PhoneLineType;
+  lineStatus: PhoneLineStatus;
+  country: string;
+  attemptCount: number;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OTPVerificationSession {
+  id: string;
+  phone: string;
+  normalizedPhone: string;
+  purpose: OTPPurpose;
+  expiresAt: string;
+  attemptCount: number;
+  maxAttempts: number;
+  resendAvailableAt: string;
+  verifiedAt?: string;
+  verificationToken?: string;
+  createdAt: string;
+  // Dev mode indicator if simulated OTP mode is active
+  isDemoMode?: boolean;
+  demoOtpCode?: string;
+}
+
+export interface BlockedPhone {
+  id: string;
+  normalizedPhone: string;
+  reasonCode: BlockedPhoneReason;
+  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  expiresAt?: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -269,6 +428,55 @@ export interface User {
   isVerified: boolean;
   deviceBindingId?: string;
   joinedDate: string;
+  // Strict Identity & Role Lock System
+  accountStatus?: AccountStatus;
+  emailVerified?: boolean;
+  emailVerifiedAt?: string;
+  emailVerificationStatus?: EmailVerificationStatus;
+  phoneVerified?: boolean;
+  phoneVerifiedAt?: string;
+  phoneVerificationStatus?: PhoneVerificationStatus;
+  roleLocked?: boolean;
+  maskedPhone?: string;
+  phoneCarrier?: string;
+  phoneLineType?: PhoneLineType;
+  phoneLineStatus?: PhoneLineStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface IdentityAvailabilityResult {
+  // Final availability (ONLY true after both format, domain, network lookup, uniqueness, and verification checks pass)
+  emailAvailable: boolean;
+  phoneAvailable: boolean;
+  normalizedEmail?: string;
+  normalizedPhone?: string;
+  existingEmailRole?: UserRole;
+  existingPhoneRole?: UserRole;
+  isConflict: boolean;
+  conflictType?: 'NONE' | 'SAME_IDENTITY_DIFFERENT_ROLE' | 'EMAIL_TAKEN' | 'PHONE_TAKEN' | 'CROSS_IDENTITY_MISMATCH';
+  errorMessage?: string;
+  canSignIn?: boolean;
+  emailStatus?: EmailVerificationStatus;
+  emailRegistered?: boolean;
+  phoneRegistered?: boolean;
+  emailDomainValid?: boolean;
+  emailDeliveryStatus?: 'DELIVERED' | 'BOUNCED' | 'FAILED' | 'PENDING';
+  phoneIntelligence?: PhoneIntelligence;
+}
+
+export interface AdminRoleChangeLog {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  previousRole: UserRole;
+  newRole: UserRole;
+  adminId: string;
+  adminEmail: string;
+  reason: string;
+  timestamp: string;
+  integrityHash: string;
 }
 
 export type IntentActionType =
