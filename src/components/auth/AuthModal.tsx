@@ -34,6 +34,7 @@ import { SurplusXLogo } from '../SurplusXLogo';
 import { UserRole, PhoneIntelligence, EmailVerificationStatus } from '../../types';
 import {
   normalizeEmailClient,
+  maskEmailClient,
   validateEmailClient,
   checkEmailApi,
   sendEmailVerificationApi,

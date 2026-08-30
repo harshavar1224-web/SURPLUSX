@@ -468,12 +468,13 @@ export class EmailVerificationService {
     if (!emailResult.success) {
       return {
         success: false,
-        error: 'Unable to send the verification code. Please check your email address and try again.',
+        status: 'EMAIL_SEND_FAILED',
+        error: emailResult.error || 'Unable to send the verification code. Please check your email configuration and try again.',
       };
     }
 
     // Safe Audit Log (NEVER logs plaintext OTP or hash)
-    console.log(`[EmailService] Email OTP requested and dispatched to ${this.maskEmail(normalized)}`);
+    console.log(`[EmailService] Real Email OTP requested and dispatched to ${this.maskEmail(normalized)} via ${emailResult.provider}`);
 
     const session: StoredEmailSession = {
       id: sessionId,
@@ -508,7 +509,20 @@ export class EmailVerificationService {
   }
 
   /**
-   * 10. Verify Email OTP & Issue 15-Minute Single-Use Verification Token
+   * 10. Resend Email OTP
+   */
+  public async resendVerificationEmail(params: {
+    sessionId?: string;
+    verification_session_id?: string;
+    email: string;
+    clientIp?: string;
+    deviceId?: string;
+  }) {
+    return this.sendVerificationEmail(params);
+  }
+
+  /**
+   * 11. Verify Email OTP & Issue 15-Minute Single-Use Verification Token
    * CRITICAL: Never discloses expected/correct OTP in error responses.
    */
   public verifyEmailCode(params: {
@@ -594,7 +608,7 @@ export class EmailVerificationService {
       };
     }
 
-    // Constant-time cryptographic verification
+    // Authoritative constant-time cryptographic verification
     const providedHash = this.hashVerificationCode(cleanCode, normalized);
     let isValid = false;
     try {
@@ -604,19 +618,6 @@ export class EmailVerificationService {
       );
     } catch {
       isValid = false;
-    }
-
-    // Development / Test environment safety:
-    // When in non-production (NODE_ENV !== 'production') and ENABLE_TEST_OTP is not disabled,
-    // permit standard dev test verification codes (e.g. 123456, 482913)
-    const isDevMode = process.env.NODE_ENV !== 'production';
-    const isTestOtpExplicitlyDisabled = process.env.ENABLE_TEST_OTP === 'false';
-    const isTestOtpAllowed = isDevMode && !isTestOtpExplicitlyDisabled;
-
-    if (!isValid && isTestOtpAllowed) {
-      if (cleanCode === '123456' || cleanCode === '482913' || cleanCode === '000000') {
-        isValid = true;
-      }
     }
 
     if (!isValid) {

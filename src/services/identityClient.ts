@@ -28,6 +28,20 @@ export function normalizeEmailClient(email: string): string {
   return email.trim().toLowerCase();
 }
 
+export function maskEmailClient(email: string): string {
+  if (!email) return '';
+  const norm = normalizeEmailClient(email);
+  const parts = norm.split('@');
+  if (parts.length !== 2) return norm;
+  const [name, domain] = parts;
+  if (name.length <= 2) {
+    return `${name[0]}*@${domain}`;
+  }
+  const visibleStart = name.slice(0, 1);
+  const visibleEnd = name.slice(-1);
+  return `${visibleStart}${'*'.repeat(Math.min(name.length - 2, 4))}${visibleEnd}@${domain}`;
+}
+
 export function validateEmailClient(email: string): boolean {
   const norm = normalizeEmailClient(email);
   if (!norm || norm.length > 254) return false;
@@ -88,7 +102,7 @@ export async function sendEmailVerificationApi(params: {
   error?: string;
 }> {
   try {
-    const res = await fetch('/api/auth/email/send-verification', {
+    const res = await fetch('/api/auth/email/send-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -98,6 +112,37 @@ export async function sendEmailVerificationApi(params: {
     return {
       success: false,
       error: err.message || 'Network error while sending email verification.',
+    };
+  }
+}
+
+export const sendEmailOtpApi = sendEmailVerificationApi;
+
+export async function resendEmailOtpApi(params: {
+  email: string;
+  sessionId?: string;
+  deviceId?: string;
+}): Promise<{
+  success: boolean;
+  status?: string;
+  sessionId?: string;
+  maskedEmail?: string;
+  expiresInSeconds?: number;
+  resendAvailableInSeconds?: number;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/auth/email/resend-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Network error while resending email verification.',
     };
   }
 }
@@ -116,7 +161,7 @@ export async function verifyEmailCodeApi(params: {
   error?: string;
 }> {
   try {
-    const res = await fetch('/api/auth/email/verify', {
+    const res = await fetch('/api/auth/email/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),

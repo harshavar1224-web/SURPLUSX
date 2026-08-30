@@ -1,271 +1,47 @@
 /**
- * SurplusX Transactional Email Service & Provider Abstraction
+ * SurplusX Transactional Email Service — Exclusively Brevo Powered
  * 
- * Production-Grade Implementation:
- * - Provider Abstraction (Resend, SendGrid, Postmark, Amazon SES, Fallback Gateway)
- * - Safe Delivery & Error Handling
- * - ZERO Plaintext OTP Exposure: OTP is only included inside the outbound email payload
- * - Safe Logging: Only masks emails and logs dispatch events; never logs OTP values
- * - Centralized Email Templates (Verification OTP, Password Reset, Receipts)
+ * Production-Grade Architecture:
+ * - Provider: Brevo (https://brevo.com / Sendinblue)
+ * - Endpoint: POST https://api.brevo.com/v3/smtp/email
+ * - Authentication: api-key: BREVO_API_KEY
+ * - Environment Variables:
+ *     BREVO_API_KEY: Secret API key for Brevo transactional email API
+ *     BREVO_FROM_EMAIL: Verified sender email (e.g., no-reply@surplusx.in or verify@surplusx.in)
+ *     BREVO_FROM_NAME: Verified sender name (e.g., SurplusX or SurplusX Security)
+ * 
+ * Strict Zero-Leakage Security Rules:
+ * 1. OTP is rendered ONLY inside the outgoing email dispatched to the user's real inbox.
+ * 2. OTP is NEVER logged, never returned in API responses, and never stored in plaintext.
+ * 3. BREVO_API_KEY is server-side only and never exposed to the frontend.
+ * 4. Masked recipient logging only (e.g. h****a@gmail.com).
+ * 5. Returns EMAIL_SEND_FAILED or EMAIL_SERVICE_NOT_CONFIGURED on failure — never fake success.
  */
 
 export interface SendEmailOptions {
   to: string;
-  from?: string;
+  toName?: string;
+  fromEmail?: string;
+  fromName?: string;
   subject: string;
-  text: string;
-  html: string;
-  replyTo?: string;
+  textContent: string;
+  htmlContent: string;
+  replyTo?: { email: string; name?: string };
 }
 
 export interface SendEmailResult {
   success: boolean;
-  provider: string;
+  provider: 'Brevo';
+  status?: string;
   messageId?: string;
   error?: string;
 }
 
-export interface EmailProvider {
-  name: string;
-  sendEmail(options: SendEmailOptions): Promise<SendEmailResult>;
-}
-
-// ---------------------------------------------------------------------------
-// 1. Resend Provider Adapter
-// ---------------------------------------------------------------------------
-export class ResendEmailProvider implements EmailProvider {
-  name = 'Resend';
-  private apiKey: string;
-
-  constructor(apiKey?: string) {
-    this.apiKey = apiKey || process.env.RESEND_API_KEY || process.env.EMAIL_PROVIDER_API_KEY || '';
-  }
-
-  async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-    if (!this.apiKey) {
-      return { success: false, provider: this.name, error: 'RESEND_API_KEY not configured' };
-    }
-
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: options.from || process.env.EMAIL_FROM_ADDRESS || 'SurplusX Security <no-reply@surplusx.org>',
-          to: [options.to],
-          subject: options.subject,
-          html: options.html,
-          text: options.text,
-          reply_to: options.replyTo,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        return {
-          success: false,
-          provider: this.name,
-          error: data.message || `Resend API returned status ${response.status}`,
-        };
-      }
-
-      return {
-        success: true,
-        provider: this.name,
-        messageId: data.id,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        provider: this.name,
-        error: err.message || 'Resend network dispatch failed',
-      };
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 2. SendGrid Provider Adapter
-// ---------------------------------------------------------------------------
-export class SendGridEmailProvider implements EmailProvider {
-  name = 'SendGrid';
-  private apiKey: string;
-
-  constructor(apiKey?: string) {
-    this.apiKey = apiKey || process.env.SENDGRID_API_KEY || '';
-  }
-
-  async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-    if (!this.apiKey) {
-      return { success: false, provider: this.name, error: 'SENDGRID_API_KEY not configured' };
-    }
-
-    try {
-      const fromAddress = options.from || process.env.EMAIL_FROM_ADDRESS || 'no-reply@surplusx.org';
-      const fromName = process.env.EMAIL_FROM_NAME || 'SurplusX Security';
-
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: options.to }] }],
-          from: { email: fromAddress, name: fromName },
-          subject: options.subject,
-          content: [
-            { type: 'text/plain', value: options.text },
-            { type: 'text/html', value: options.html },
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        return {
-          success: false,
-          provider: this.name,
-          error: `SendGrid API returned status ${response.status}: ${text}`,
-        };
-      }
-
-      const messageId = response.headers.get('x-message-id') || `sg_${Date.now()}`;
-      return {
-        success: true,
-        provider: this.name,
-        messageId,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        provider: this.name,
-        error: err.message || 'SendGrid network dispatch failed',
-      };
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 3. Postmark Provider Adapter
-// ---------------------------------------------------------------------------
-export class PostmarkEmailProvider implements EmailProvider {
-  name = 'Postmark';
-  private serverToken: string;
-
-  constructor(serverToken?: string) {
-    this.serverToken = serverToken || process.env.POSTMARK_SERVER_TOKEN || '';
-  }
-
-  async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-    if (!this.serverToken) {
-      return { success: false, provider: this.name, error: 'POSTMARK_SERVER_TOKEN not configured' };
-    }
-
-    try {
-      const response = await fetch('https://api.postmarkapp.com/email', {
-        method: 'POST',
-        headers: {
-          'X-Postmark-Server-Token': this.serverToken,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          From: options.from || process.env.EMAIL_FROM_ADDRESS || 'no-reply@surplusx.org',
-          To: options.to,
-          Subject: options.subject,
-          HtmlBody: options.html,
-          TextBody: options.text,
-          ReplyTo: options.replyTo,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok || data.ErrorCode !== 0) {
-        return {
-          success: false,
-          provider: this.name,
-          error: data.Message || `Postmark API returned code ${data.ErrorCode}`,
-        };
-      }
-
-      return {
-        success: true,
-        provider: this.name,
-        messageId: data.MessageID,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        provider: this.name,
-        error: err.message || 'Postmark network dispatch failed',
-      };
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 4. SurplusX Standard Transactional Provider
-// ---------------------------------------------------------------------------
-export class SurplusXTransactionalProvider implements EmailProvider {
-  name = 'SurplusX_Gateway';
-
-  async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-    // If webhook or external gateway endpoint is provided
-    const gatewayEndpoint = process.env.EMAIL_GATEWAY_URL;
-    if (gatewayEndpoint) {
-      try {
-        const res = await fetch(gatewayEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(options),
-        });
-        if (res.ok) {
-          return { success: true, provider: this.name, messageId: `gw_${Date.now()}` };
-        }
-      } catch {
-        // Continue to standard handling
-      }
-    }
-
-    // Default transactional delivery confirmation
-    return {
-      success: true,
-      provider: this.name,
-      messageId: `sx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 5. Centralized Email Service
-// ---------------------------------------------------------------------------
 export class EmailService {
   private static instance: EmailService;
-  private providers: EmailProvider[] = [];
-  private defaultFromAddress: string;
-  private defaultFromName: string;
+  private readonly brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
 
-  private constructor() {
-    this.defaultFromAddress = process.env.EMAIL_FROM_ADDRESS || 'no-reply@surplusx.org';
-    this.defaultFromName = process.env.EMAIL_FROM_NAME || 'SurplusX Security';
-
-    // Register providers in priority order
-    if (process.env.RESEND_API_KEY || process.env.EMAIL_PROVIDER_API_KEY) {
-      this.providers.push(new ResendEmailProvider());
-    }
-    if (process.env.SENDGRID_API_KEY) {
-      this.providers.push(new SendGridEmailProvider());
-    }
-    if (process.env.POSTMARK_SERVER_TOKEN) {
-      this.providers.push(new PostmarkEmailProvider());
-    }
-    // Always include SurplusX Transactional fallback
-    this.providers.push(new SurplusXTransactionalProvider());
-  }
+  private constructor() {}
 
   public static getInstance(): EmailService {
     if (!EmailService.instance) {
@@ -275,7 +51,7 @@ export class EmailService {
   }
 
   /**
-   * Helper to mask email address for safe logging and UI display (e.g. h****a@gmail.com)
+   * Helper to mask email address for safe logging and UI display (e.g., h****a@gmail.com)
    */
   public maskEmail(email: string): string {
     if (!email) return '';
@@ -292,64 +68,163 @@ export class EmailService {
   }
 
   /**
-   * Dispatch email with automatic multi-provider fallback
+   * Check if Brevo is fully configured on the server
    */
-  public async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-    const maskedTo = this.maskEmail(options.to);
-    const from = options.from || `${this.defaultFromName} <${this.defaultFromAddress}>`;
+  public isConfigured(): boolean {
+    const apiKey = (process.env.BREVO_API_KEY || '').trim();
+    const fromEmail = (process.env.BREVO_FROM_EMAIL || '').trim();
+    return !!apiKey && !!fromEmail;
+  }
 
-    let lastError = 'No email providers available';
+  /**
+   * Diagnostic summary (safe for logs & internal checks)
+   */
+  public getConfigurationStatus() {
+    const apiKey = (process.env.BREVO_API_KEY || '').trim();
+    const fromEmail = (process.env.BREVO_FROM_EMAIL || '').trim();
+    const fromName = (process.env.BREVO_FROM_NAME || 'SurplusX').trim();
 
-    for (const provider of this.providers) {
-      try {
-        const result = await provider.sendEmail({
-          ...options,
-          from,
-        });
-
-        if (result.success) {
-          // Safe log: Never logs OTP, passwords, or secrets
-          console.log(`[EmailService] Email successfully dispatched to ${maskedTo} via provider: ${provider.name}`);
-          return result;
-        } else {
-          lastError = result.error || 'Provider rejected email dispatch';
-        }
-      } catch (err: any) {
-        lastError = err.message || 'Dispatch exception';
-      }
-    }
-
-    console.warn(`[EmailService] Failed to send email to ${maskedTo}: ${lastError}`);
     return {
-      success: false,
-      provider: 'none',
-      error: lastError,
+      provider: 'Brevo',
+      hasApiKey: !!apiKey,
+      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 4)}...` : 'not_set',
+      fromEmail: fromEmail || 'not_set',
+      fromName,
+      isConfigured: !!apiKey && !!fromEmail,
     };
   }
 
   /**
-   * 1. Send 6-Digit Email Verification OTP
+   * Dispatch transactional email via Brevo API (POST https://api.brevo.com/v3/smtp/email)
+   */
+  public async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
+    const apiKey = (process.env.BREVO_API_KEY || '').trim();
+    const defaultFromEmail = (process.env.BREVO_FROM_EMAIL || '').trim();
+    const defaultFromName = (process.env.BREVO_FROM_NAME || 'SurplusX').trim();
+
+    const maskedRecipient = this.maskEmail(options.to);
+
+    if (!apiKey) {
+      const errorMsg = 'BREVO_API_KEY is not configured on the server. Please set BREVO_API_KEY in environment variables.';
+      console.warn(`[Brevo EmailService] Cannot send email to ${maskedRecipient}: ${errorMsg}`);
+      return {
+        success: false,
+        provider: 'Brevo',
+        status: 'EMAIL_SERVICE_NOT_CONFIGURED',
+        error: errorMsg,
+      };
+    }
+
+    const senderEmail = (options.fromEmail || defaultFromEmail).trim();
+    const senderName = (options.fromName || defaultFromName).trim();
+
+    if (!senderEmail) {
+      const errorMsg = 'BREVO_FROM_EMAIL is not configured. Please set a verified sender address (e.g., no-reply@surplusx.in) in BREVO_FROM_EMAIL.';
+      console.warn(`[Brevo EmailService] Cannot send email to ${maskedRecipient}: ${errorMsg}`);
+      return {
+        success: false,
+        provider: 'Brevo',
+        status: 'EMAIL_SERVICE_NOT_CONFIGURED',
+        error: errorMsg,
+      };
+    }
+
+    const payload = {
+      sender: {
+        name: senderName,
+        email: senderEmail,
+      },
+      to: [
+        {
+          email: options.to.trim().toLowerCase(),
+          name: options.toName || options.to.split('@')[0],
+        },
+      ],
+      subject: options.subject,
+      htmlContent: options.htmlContent,
+      textContent: options.textContent,
+      ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+    };
+
+    try {
+      const response = await fetch(this.brevoApiUrl, {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseText = await response.text();
+      let responseData: any = {};
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { message: responseText };
+      }
+
+      if (!response.ok) {
+        const errorMsg = responseData.message || responseData.error || `Brevo API returned HTTP ${response.status} (${responseData.code || 'unknown'})`;
+        console.warn(`[Brevo EmailService] Brevo rejected dispatch to ${maskedRecipient}: ${errorMsg}`);
+        return {
+          success: false,
+          provider: 'Brevo',
+          status: 'EMAIL_SEND_FAILED',
+          error: `Brevo API error: ${errorMsg}`,
+        };
+      }
+
+      const messageId = responseData.messageId || `brevo_${Date.now()}`;
+      // Safe diagnostic log (NEVER logs OTP or API keys)
+      console.log(`[Brevo EmailService] Email successfully accepted by Brevo for ${maskedRecipient} (messageId: ${messageId})`);
+
+      return {
+        success: true,
+        provider: 'Brevo',
+        status: 'OTP_SENT',
+        messageId,
+      };
+    } catch (err: any) {
+      const errorMsg = err.message || 'Network dispatch exception';
+      console.warn(`[Brevo EmailService] Network error dispatching to ${maskedRecipient}: ${errorMsg}`);
+      return {
+        success: false,
+        provider: 'Brevo',
+        status: 'EMAIL_SEND_FAILED',
+        error: `Unable to connect to Brevo email service: ${errorMsg}`,
+      };
+    }
+  }
+
+  /**
+   * 1. Send 6-Digit Email Verification OTP via Brevo
    * CRITICAL SECURITY REQUIREMENT:
-   * The OTP is rendered ONLY in the outgoing email content delivered to the user's inbox.
+   * The actual OTP is inserted into the email body ONLY and delivered directly to the user's inbox.
    */
   public async sendVerificationOTP(
     email: string,
     otp: string,
     expiresInMinutes = 5
   ): Promise<SendEmailResult> {
-    const subject = 'Your SurplusX verification code';
+    const subject = 'Verify your SurplusX account';
 
     const textContent = `Hello,
 
-Your SurplusX verification code is: ${otp}
+Your SurplusX verification code is:
+
+${otp}
 
 This code expires in ${expiresInMinutes} minutes.
 
-If you did not request this code, you can safely ignore this email.
 Do not share this code with anyone.
 
-SurplusX Food Rescue & Zero-Waste Network
-https://surplusx.org`;
+If you did not request this code, ignore this email.
+
+Thanks,
+SurplusX Team
+https://surplusx.in`;
 
     const htmlContent = `<!DOCTYPE html>
 <html lang="en">
@@ -381,8 +256,8 @@ https://surplusx.org`;
 
               <!-- OTP Display Box -->
               <div style="background-color: #ecfdf5; border: 2px dashed #059669; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-                <div style="font-size: 11px; font-weight: 700; color: #065f46; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">Your 6-Digit Code</div>
-                <div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #047857; line-height: 1.2;">
+                <div style="font-size: 11px; font-weight: 700; color: #065f46; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">Your 6-Digit Verification Code</div>
+                <div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 38px; font-weight: 800; letter-spacing: 8px; color: #047857; line-height: 1.2;">
                   ${otp}
                 </div>
                 <div style="font-size: 12px; font-weight: 600; color: #047857; margin-top: 8px;">
@@ -390,15 +265,15 @@ https://surplusx.org`;
                 </div>
               </div>
 
-              <!-- Security Notice -->
+              <!-- Security Alert Notice -->
               <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin: 24px 0;">
                 <p style="margin: 0; color: #92400e; font-size: 12px; line-height: 1.5; font-weight: 500;">
-                  <strong>Security Alert:</strong> Never share this code with anyone. SurplusX support representatives will never ask you for your verification code.
+                  <strong>Security Alert:</strong> Do not share this code with anyone. SurplusX team members will never ask you for your verification code.
                 </p>
               </div>
 
               <p style="margin: 0; color: #64748b; font-size: 13px; line-height: 1.5;">
-                If you did not request this verification code, you can safely ignore this email.
+                If you did not request this code, you can safely ignore this email.
               </p>
             </td>
           </tr>
@@ -407,7 +282,7 @@ https://surplusx.org`;
             <td style="background-color: #f8fafc; padding: 20px 32px; border-top: 1px solid #e2e8f0; text-align: center;">
               <p style="margin: 0; color: #94a3b8; font-size: 12px; line-height: 1.4;">
                 &copy; ${new Date().getFullYear()} SurplusX Technologies India. All rights reserved.<br>
-                Empowering zero-hunger communities through hyper-local surplus redirection.
+                Empowering zero-hunger communities through hyper-local surplus food redirection.
               </p>
             </td>
           </tr>
@@ -421,32 +296,32 @@ https://surplusx.org`;
     return this.sendEmail({
       to: email,
       subject,
-      text: textContent,
-      html: htmlContent,
+      textContent,
+      htmlContent,
     });
   }
 
   /**
-   * 2. Send Password Reset Email
+   * 2. Send Password Reset Email via Brevo
    */
   public async sendPasswordResetEmail(
     email: string,
     resetTokenOrCode: string
   ): Promise<SendEmailResult> {
     const subject = 'Reset your SurplusX password';
-    const text = `Hello,\n\nWe received a request to reset your SurplusX password.\nYour reset code is: ${resetTokenOrCode}\n\nThis code expires in 15 minutes.\n\nSurplusX Security`;
-    const html = `<p>Hello,</p><p>Your password reset code is: <strong>${resetTokenOrCode}</strong> (Valid for 15 minutes).</p>`;
+    const textContent = `Hello,\n\nWe received a request to reset your SurplusX password.\nYour reset code is: ${resetTokenOrCode}\n\nThis code expires in 15 minutes.\n\nSurplusX Security Team`;
+    const htmlContent = `<p>Hello,</p><p>Your password reset code is: <strong>${resetTokenOrCode}</strong> (Valid for 15 minutes).</p>`;
 
     return this.sendEmail({
       to: email,
       subject,
-      text,
-      html,
+      textContent,
+      htmlContent,
     });
   }
 
   /**
-   * 3. Send Order Receipt Email
+   * 3. Send Order Receipt Email via Brevo
    */
   public async sendOrderReceipt(
     email: string,
@@ -459,19 +334,19 @@ https://surplusx.org`;
     }
   ): Promise<SendEmailResult> {
     const subject = `Your SurplusX Order Receipt (#${orderDetails.orderId})`;
-    const text = `Hello ${orderDetails.customerName},\n\nThank you for rescuing food with SurplusX!\nOrder ID: ${orderDetails.orderId}\nTotal: ₹${orderDetails.totalAmount}\nPickup Store: ${orderDetails.pickupStore}\n\nSurplusX`;
-    const html = `<p>Hello ${orderDetails.customerName},</p><p>Thank you for rescuing food with SurplusX!</p><p>Order ID: <strong>${orderDetails.orderId}</strong><br>Total: ₹${orderDetails.totalAmount}<br>Store: ${orderDetails.pickupStore}</p>`;
+    const textContent = `Hello ${orderDetails.customerName},\n\nThank you for rescuing food with SurplusX!\nOrder ID: ${orderDetails.orderId}\nTotal: ₹${orderDetails.totalAmount}\nPickup Store: ${orderDetails.pickupStore}\n\nSurplusX`;
+    const htmlContent = `<p>Hello ${orderDetails.customerName},</p><p>Thank you for rescuing food with SurplusX!</p><p>Order ID: <strong>${orderDetails.orderId}</strong><br>Total: ₹${orderDetails.totalAmount}<br>Store: ${orderDetails.pickupStore}</p>`;
 
     return this.sendEmail({
       to: email,
       subject,
-      text,
-      html,
+      textContent,
+      htmlContent,
     });
   }
 
   /**
-   * 4. Send Order / Donation Notification Email
+   * 4. Send Order / Donation Notification Email via Brevo
    */
   public async sendOrderNotification(
     email: string,
@@ -481,8 +356,24 @@ https://surplusx.org`;
     return this.sendEmail({
       to: email,
       subject: `SurplusX Notification: ${title}`,
-      text: `${title}\n\n${message}\n\nSurplusX`,
-      html: `<h3>${title}</h3><p>${message}</p>`,
+      textContent: `${title}\n\n${message}\n\nSurplusX`,
+      htmlContent: `<h3>${title}</h3><p>${message}</p>`,
+    });
+  }
+
+  /**
+   * 5. Test Email Dispatch (Internal Diagnostics) via Brevo
+   */
+  public async sendTestEmail(toEmail: string): Promise<SendEmailResult> {
+    const subject = 'SurplusX Brevo Transactional Email Test';
+    const textContent = `Hello,\n\nThis is a test transactional email confirming that Brevo API is configured and operational for SurplusX.\n\nTimestamp: ${new Date().toISOString()}\nSurplusX Team`;
+    const htmlContent = `<h2>SurplusX Brevo Transactional Email Test</h2><p>This is a test transactional email confirming that Brevo API is configured and operational for SurplusX.</p><p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>`;
+
+    return this.sendEmail({
+      to: toEmail,
+      subject,
+      textContent,
+      htmlContent,
     });
   }
 }

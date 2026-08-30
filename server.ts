@@ -17,6 +17,7 @@ import {
 } from './src/server/accountIdentityService';
 import { phoneVerificationService } from './src/server/phoneVerificationService';
 import { emailVerificationService } from './src/server/emailVerificationService';
+import { emailService } from './src/server/emailService';
 import { INITIAL_LISTINGS } from './src/data/mockData';
 import { UserRole, LocationRadiusPolicyType, LocalityType } from './src/types';
 
@@ -684,6 +685,7 @@ async function startServer() {
 
   app.post('/api/auth/email/send-verification', handleSendEmailVerification);
   app.post('/api/auth/email/send-otp', handleSendEmailVerification);
+  app.post('/api/auth/email/resend-otp', handleSendEmailVerification);
 
   // 14. POST /api/auth/email/verify & /api/auth/email/verify-otp - Verify Email Code & Issue 15-Minute Token
   const handleVerifyEmail = (req: express.Request, res: express.Response) => {
@@ -720,6 +722,40 @@ async function startServer() {
 
   app.post('/api/auth/email/verify', handleVerifyEmail);
   app.post('/api/auth/email/verify-otp', handleVerifyEmail);
+
+  // Internal Diagnostics: POST /api/internal/test-email (Specification #38)
+  app.post('/api/internal/test-email', async (req, res) => {
+    try {
+      const { to } = req.body;
+      if (!to) {
+        return res.status(400).json({ success: false, error: 'Recipient "to" email address is required.' });
+      }
+
+      const result = await emailService.sendTestEmail(to);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json({
+        success: true,
+        status: 'DELIVERED_TO_PROVIDER',
+        provider: result.provider,
+        messageId: result.messageId,
+        maskedRecipient: emailService.maskEmail(to),
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Internal test email failure.' });
+    }
+  });
+
+  // Internal Diagnostics: GET /api/internal/email-status
+  app.get('/api/internal/email-status', (req, res) => {
+    res.json({
+      success: true,
+      provider: 'Brevo',
+      isConfigured: emailService.isConfigured(),
+      config: emailService.getConfigurationStatus(),
+    });
+  });
 
   // 15. POST /api/auth/phone/lookup - Phone Number Intelligence & Risk Assessment (Specification #8, #9, #10, #11)
   app.post('/api/auth/phone/lookup', (req, res) => {
