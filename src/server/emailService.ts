@@ -1,47 +1,204 @@
 /**
- * SurplusX Transactional Email Service — Exclusively Brevo Powered
+ * SurplusX Transactional Email Service — Exclusively Resend Powered
  * 
  * Production-Grade Architecture:
- * - Provider: Brevo (https://brevo.com / Sendinblue)
- * - Endpoint: POST https://api.brevo.com/v3/smtp/email
- * - Authentication: api-key: BREVO_API_KEY
+ * - Provider: Resend (https://resend.com)
+ * - Official SDK & API Integration
  * - Environment Variables:
- *     BREVO_API_KEY: Secret API key for Brevo transactional email API
- *     BREVO_FROM_EMAIL: Verified sender email (e.g., no-reply@surplusx.in or verify@surplusx.in)
- *     BREVO_FROM_NAME: Verified sender name (e.g., SurplusX or SurplusX Security)
+ *     RESEND_API_KEY: Secret key for Resend API
+ *     EMAIL_FROM: Verified sender address (e.g., no-reply@surplusx.in or onboarding@resend.dev)
+ *     EMAIL_FROM_NAME: Sender name (e.g., SurplusX or SurplusX Security)
  * 
- * Strict Zero-Leakage Security Rules:
+ * Strict Security Rules:
  * 1. OTP is rendered ONLY inside the outgoing email dispatched to the user's real inbox.
  * 2. OTP is NEVER logged, never returned in API responses, and never stored in plaintext.
- * 3. BREVO_API_KEY is server-side only and never exposed to the frontend.
- * 4. Masked recipient logging only (e.g. h****a@gmail.com).
+ * 3. RESEND_API_KEY is server-side only and never exposed to the frontend.
+ * 4. Safe masked logging only (e.g. h****a@gmail.com).
  * 5. Returns EMAIL_SEND_FAILED or EMAIL_SERVICE_NOT_CONFIGURED on failure — never fake success.
  */
 
+import { Resend } from 'resend';
+
 export interface SendEmailOptions {
   to: string;
-  toName?: string;
-  fromEmail?: string;
+  from?: string;
   fromName?: string;
   subject: string;
-  textContent: string;
-  htmlContent: string;
-  replyTo?: { email: string; name?: string };
+  text: string;
+  html: string;
+  replyTo?: string;
 }
 
 export interface SendEmailResult {
   success: boolean;
-  provider: 'Brevo';
+  provider: 'Resend';
   status?: string;
   messageId?: string;
   error?: string;
 }
 
+export interface EmailProvider {
+  name: string;
+  isConfigured(): boolean;
+  sendEmail(options: SendEmailOptions): Promise<SendEmailResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Resend Email Provider Adapter
+// ---------------------------------------------------------------------------
+export class ResendEmailProvider implements EmailProvider {
+  name = 'Resend';
+  private resendClient: Resend | null = null;
+  private cachedApiKey = '';
+
+  private getApiKey(): string {
+    return (process.env.RESEND_API_KEY || '').trim();
+  }
+
+  private getResendClient(): Resend | null {
+    const apiKey = this.getApiKey();
+    if (!apiKey) return null;
+
+    if (!this.resendClient || this.cachedApiKey !== apiKey) {
+      this.resendClient = new Resend(apiKey);
+      this.cachedApiKey = apiKey;
+    }
+    return this.resendClient;
+  }
+
+  isConfigured(): boolean {
+    return !!this.getApiKey();
+  }
+
+  private getFormattedFrom(customFrom?: string, customFromName?: string): string {
+    if (customFrom) {
+      if (customFrom.includes('<') && customFrom.includes('>')) {
+        return customFrom;
+      }
+      const name = customFromName || (process.env.EMAIL_FROM_NAME || 'SurplusX').trim();
+      return `${name} <${customFrom}>`;
+    }
+
+    const rawFrom = (process.env.EMAIL_FROM || '').trim();
+    const fromName = (process.env.EMAIL_FROM_NAME || 'SurplusX').trim();
+
+    if (rawFrom) {
+      if (rawFrom.includes('<') && rawFrom.includes('>')) {
+        return rawFrom;
+      }
+      return `${fromName} <${rawFrom}>`;
+    }
+
+    // Default Resend sandbox sender if custom domain is not yet configured
+    return `${fromName} <onboarding@resend.dev>`;
+  }
+
+  async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return {
+        success: false,
+        provider: 'Resend',
+        status: 'EMAIL_SERVICE_NOT_CONFIGURED',
+        error: 'RESEND_API_KEY is not configured on the server. Please set RESEND_API_KEY in environment variables.',
+      };
+    }
+
+    const from = this.getFormattedFrom(options.from, options.fromName);
+    const to = options.to.trim().toLowerCase();
+
+    try {
+      const client = this.getResendClient();
+      if (client) {
+        const { data, error } = await client.emails.send({
+          from,
+          to: [to],
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+          ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+        });
+
+        if (error) {
+          const errorMsg = error.message || error.name || 'Resend rejected email dispatch';
+          return {
+            success: false,
+            provider: 'Resend',
+            status: 'EMAIL_SEND_FAILED',
+            error: `Resend API error: ${errorMsg}`,
+          };
+        }
+
+        return {
+          success: true,
+          provider: 'Resend',
+          status: 'OTP_SENT',
+          messageId: data?.id || `resend_${Date.now()}`,
+        };
+      }
+
+      // Fallback direct REST API
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+          reply_to: options.replyTo,
+        }),
+      });
+
+      const responseText = await response.text();
+      let resData: any = {};
+      try {
+        resData = JSON.parse(responseText);
+      } catch {
+        resData = { message: responseText };
+      }
+
+      if (!response.ok) {
+        const errorMsg = resData.message || resData.error?.message || resData.error || `Resend returned HTTP ${response.status}`;
+        return {
+          success: false,
+          provider: 'Resend',
+          status: 'EMAIL_SEND_FAILED',
+          error: `Resend API error: ${errorMsg}`,
+        };
+      }
+
+      return {
+        success: true,
+        provider: 'Resend',
+        status: 'OTP_SENT',
+        messageId: resData.id || `resend_${Date.now()}`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        provider: 'Resend',
+        status: 'EMAIL_SEND_FAILED',
+        error: `Resend network dispatch failed: ${err.message || err}`,
+      };
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Centralized Email Service
+// ---------------------------------------------------------------------------
 export class EmailService {
   private static instance: EmailService;
-  private readonly brevoApiUrl = 'https://api.brevo.com/v3/smtp/email';
+  private provider: EmailProvider;
 
-  private constructor() {}
+  private constructor() {
+    this.provider = new ResendEmailProvider();
+  }
 
   public static getInstance(): EmailService {
     if (!EmailService.instance) {
@@ -68,138 +225,70 @@ export class EmailService {
   }
 
   /**
-   * Check if Brevo is fully configured on the server
+   * Check if Resend is configured on the server
    */
   public isConfigured(): boolean {
-    const apiKey = (process.env.BREVO_API_KEY || '').trim();
-    const fromEmail = (process.env.BREVO_FROM_EMAIL || '').trim();
-    return !!apiKey && !!fromEmail;
+    return this.provider.isConfigured();
   }
 
   /**
    * Diagnostic summary (safe for logs & internal checks)
    */
   public getConfigurationStatus() {
-    const apiKey = (process.env.BREVO_API_KEY || '').trim();
-    const fromEmail = (process.env.BREVO_FROM_EMAIL || '').trim();
-    const fromName = (process.env.BREVO_FROM_NAME || 'SurplusX').trim();
+    const apiKey = (process.env.RESEND_API_KEY || '').trim();
+    const fromEmail = (process.env.EMAIL_FROM || '').trim();
+    const fromName = (process.env.EMAIL_FROM_NAME || 'SurplusX').trim();
 
     return {
-      provider: 'Brevo',
+      provider: 'Resend',
       hasApiKey: !!apiKey,
-      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 4)}...` : 'not_set',
-      fromEmail: fromEmail || 'not_set',
+      apiKeyPrefix: apiKey ? `${apiKey.slice(0, 5)}...` : 'not_set',
+      fromEmail: fromEmail || 'onboarding@resend.dev (default)',
       fromName,
-      isConfigured: !!apiKey && !!fromEmail,
+      isConfigured: !!apiKey,
     };
   }
 
   /**
-   * Dispatch transactional email via Brevo API (POST https://api.brevo.com/v3/smtp/email)
+   * Dispatch transactional email via Resend
    */
   public async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-    const apiKey = (process.env.BREVO_API_KEY || '').trim();
-    const defaultFromEmail = (process.env.BREVO_FROM_EMAIL || '').trim();
-    const defaultFromName = (process.env.BREVO_FROM_NAME || 'SurplusX').trim();
-
     const maskedRecipient = this.maskEmail(options.to);
 
-    if (!apiKey) {
-      const errorMsg = 'BREVO_API_KEY is not configured on the server. Please set BREVO_API_KEY in environment variables.';
-      console.warn(`[Brevo EmailService] Cannot send email to ${maskedRecipient}: ${errorMsg}`);
+    if (!this.provider.isConfigured()) {
+      const errorMsg = 'RESEND_API_KEY is not configured on the server. Please configure RESEND_API_KEY in environment variables.';
+      console.warn(`[Resend EmailService] Cannot send email to ${maskedRecipient}: ${errorMsg}`);
       return {
         success: false,
-        provider: 'Brevo',
+        provider: 'Resend',
         status: 'EMAIL_SERVICE_NOT_CONFIGURED',
         error: errorMsg,
       };
     }
-
-    const senderEmail = (options.fromEmail || defaultFromEmail).trim();
-    const senderName = (options.fromName || defaultFromName).trim();
-
-    if (!senderEmail) {
-      const errorMsg = 'BREVO_FROM_EMAIL is not configured. Please set a verified sender address (e.g., no-reply@surplusx.in) in BREVO_FROM_EMAIL.';
-      console.warn(`[Brevo EmailService] Cannot send email to ${maskedRecipient}: ${errorMsg}`);
-      return {
-        success: false,
-        provider: 'Brevo',
-        status: 'EMAIL_SERVICE_NOT_CONFIGURED',
-        error: errorMsg,
-      };
-    }
-
-    const payload = {
-      sender: {
-        name: senderName,
-        email: senderEmail,
-      },
-      to: [
-        {
-          email: options.to.trim().toLowerCase(),
-          name: options.toName || options.to.split('@')[0],
-        },
-      ],
-      subject: options.subject,
-      htmlContent: options.htmlContent,
-      textContent: options.textContent,
-      ...(options.replyTo ? { replyTo: options.replyTo } : {}),
-    };
 
     try {
-      const response = await fetch(this.brevoApiUrl, {
-        method: 'POST',
-        headers: {
-          'api-key': apiKey,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const responseText = await response.text();
-      let responseData: any = {};
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { message: responseText };
+      const result = await this.provider.sendEmail(options);
+      if (result.success) {
+        // Safe diagnostic log (NEVER logs OTP, secrets, or passwords)
+        console.log(`[Resend EmailService] Verification email accepted by Resend for ${maskedRecipient} (messageId: ${result.messageId})`);
+      } else {
+        console.warn(`[Resend EmailService] Resend dispatch failed for ${maskedRecipient}: ${result.error}`);
       }
-
-      if (!response.ok) {
-        const errorMsg = responseData.message || responseData.error || `Brevo API returned HTTP ${response.status} (${responseData.code || 'unknown'})`;
-        console.warn(`[Brevo EmailService] Brevo rejected dispatch to ${maskedRecipient}: ${errorMsg}`);
-        return {
-          success: false,
-          provider: 'Brevo',
-          status: 'EMAIL_SEND_FAILED',
-          error: `Brevo API error: ${errorMsg}`,
-        };
-      }
-
-      const messageId = responseData.messageId || `brevo_${Date.now()}`;
-      // Safe diagnostic log (NEVER logs OTP or API keys)
-      console.log(`[Brevo EmailService] Email successfully accepted by Brevo for ${maskedRecipient} (messageId: ${messageId})`);
-
-      return {
-        success: true,
-        provider: 'Brevo',
-        status: 'OTP_SENT',
-        messageId,
-      };
+      return result;
     } catch (err: any) {
-      const errorMsg = err.message || 'Network dispatch exception';
-      console.warn(`[Brevo EmailService] Network error dispatching to ${maskedRecipient}: ${errorMsg}`);
+      const errorMsg = err.message || 'Dispatch exception';
+      console.warn(`[Resend EmailService] Exception dispatching to ${maskedRecipient}: ${errorMsg}`);
       return {
         success: false,
-        provider: 'Brevo',
+        provider: 'Resend',
         status: 'EMAIL_SEND_FAILED',
-        error: `Unable to connect to Brevo email service: ${errorMsg}`,
+        error: `Failed to deliver email: ${errorMsg}`,
       };
     }
   }
 
   /**
-   * 1. Send 6-Digit Email Verification OTP via Brevo
+   * 1. Send 6-Digit Email Verification OTP via Resend
    * CRITICAL SECURITY REQUIREMENT:
    * The actual OTP is inserted into the email body ONLY and delivered directly to the user's inbox.
    */
@@ -210,7 +299,7 @@ export class EmailService {
   ): Promise<SendEmailResult> {
     const subject = 'Verify your SurplusX account';
 
-    const textContent = `Hello,
+    const text = `Hello,
 
 Your SurplusX verification code is:
 
@@ -220,13 +309,13 @@ This code expires in ${expiresInMinutes} minutes.
 
 Do not share this code with anyone.
 
-If you did not request this code, ignore this email.
+If you did not request this verification, you can safely ignore this email.
 
 Thanks,
 SurplusX Team
 https://surplusx.in`;
 
-    const htmlContent = `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -273,7 +362,7 @@ https://surplusx.in`;
               </div>
 
               <p style="margin: 0; color: #64748b; font-size: 13px; line-height: 1.5;">
-                If you did not request this code, you can safely ignore this email.
+                If you did not request this verification, you can safely ignore this email.
               </p>
             </td>
           </tr>
@@ -296,32 +385,32 @@ https://surplusx.in`;
     return this.sendEmail({
       to: email,
       subject,
-      textContent,
-      htmlContent,
+      text,
+      html,
     });
   }
 
   /**
-   * 2. Send Password Reset Email via Brevo
+   * 2. Send Password Reset Email via Resend
    */
   public async sendPasswordResetEmail(
     email: string,
     resetTokenOrCode: string
   ): Promise<SendEmailResult> {
     const subject = 'Reset your SurplusX password';
-    const textContent = `Hello,\n\nWe received a request to reset your SurplusX password.\nYour reset code is: ${resetTokenOrCode}\n\nThis code expires in 15 minutes.\n\nSurplusX Security Team`;
-    const htmlContent = `<p>Hello,</p><p>Your password reset code is: <strong>${resetTokenOrCode}</strong> (Valid for 15 minutes).</p>`;
+    const text = `Hello,\n\nWe received a request to reset your SurplusX password.\nYour reset code is: ${resetTokenOrCode}\n\nThis code expires in 15 minutes.\n\nSurplusX Security Team`;
+    const html = `<p>Hello,</p><p>Your password reset code is: <strong>${resetTokenOrCode}</strong> (Valid for 15 minutes).</p>`;
 
     return this.sendEmail({
       to: email,
       subject,
-      textContent,
-      htmlContent,
+      text,
+      html,
     });
   }
 
   /**
-   * 3. Send Order Receipt Email via Brevo
+   * 3. Send Order Receipt Email via Resend
    */
   public async sendOrderReceipt(
     email: string,
@@ -334,19 +423,19 @@ https://surplusx.in`;
     }
   ): Promise<SendEmailResult> {
     const subject = `Your SurplusX Order Receipt (#${orderDetails.orderId})`;
-    const textContent = `Hello ${orderDetails.customerName},\n\nThank you for rescuing food with SurplusX!\nOrder ID: ${orderDetails.orderId}\nTotal: ₹${orderDetails.totalAmount}\nPickup Store: ${orderDetails.pickupStore}\n\nSurplusX`;
-    const htmlContent = `<p>Hello ${orderDetails.customerName},</p><p>Thank you for rescuing food with SurplusX!</p><p>Order ID: <strong>${orderDetails.orderId}</strong><br>Total: ₹${orderDetails.totalAmount}<br>Store: ${orderDetails.pickupStore}</p>`;
+    const text = `Hello ${orderDetails.customerName},\n\nThank you for rescuing food with SurplusX!\nOrder ID: ${orderDetails.orderId}\nTotal: ₹${orderDetails.totalAmount}\nPickup Store: ${orderDetails.pickupStore}\n\nSurplusX`;
+    const html = `<p>Hello ${orderDetails.customerName},</p><p>Thank you for rescuing food with SurplusX!</p><p>Order ID: <strong>${orderDetails.orderId}</strong><br>Total: ₹${orderDetails.totalAmount}<br>Store: ${orderDetails.pickupStore}</p>`;
 
     return this.sendEmail({
       to: email,
       subject,
-      textContent,
-      htmlContent,
+      text,
+      html,
     });
   }
 
   /**
-   * 4. Send Order / Donation Notification Email via Brevo
+   * 4. Send Order / Donation Notification Email via Resend
    */
   public async sendOrderNotification(
     email: string,
@@ -356,24 +445,24 @@ https://surplusx.in`;
     return this.sendEmail({
       to: email,
       subject: `SurplusX Notification: ${title}`,
-      textContent: `${title}\n\n${message}\n\nSurplusX`,
-      htmlContent: `<h3>${title}</h3><p>${message}</p>`,
+      text: `${title}\n\n${message}\n\nSurplusX`,
+      html: `<h3>${title}</h3><p>${message}</p>`,
     });
   }
 
   /**
-   * 5. Test Email Dispatch (Internal Diagnostics) via Brevo
+   * 5. Test Email Dispatch (Internal Diagnostics) via Resend
    */
   public async sendTestEmail(toEmail: string): Promise<SendEmailResult> {
-    const subject = 'SurplusX Brevo Transactional Email Test';
-    const textContent = `Hello,\n\nThis is a test transactional email confirming that Brevo API is configured and operational for SurplusX.\n\nTimestamp: ${new Date().toISOString()}\nSurplusX Team`;
-    const htmlContent = `<h2>SurplusX Brevo Transactional Email Test</h2><p>This is a test transactional email confirming that Brevo API is configured and operational for SurplusX.</p><p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>`;
+    const subject = 'SurplusX Resend Transactional Email Test';
+    const text = `Hello,\n\nThis is a test transactional email confirming that Resend API is configured and operational for SurplusX.\n\nTimestamp: ${new Date().toISOString()}\nSurplusX Team`;
+    const html = `<h2>SurplusX Resend Transactional Email Test</h2><p>This is a test transactional email confirming that Resend API is configured and operational for SurplusX.</p><p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>`;
 
     return this.sendEmail({
       to: toEmail,
       subject,
-      textContent,
-      htmlContent,
+      text,
+      html,
     });
   }
 }
