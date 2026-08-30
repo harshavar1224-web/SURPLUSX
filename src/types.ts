@@ -341,7 +341,7 @@ export interface EmailVerification {
   id: string;
   email: string;
   userId?: string;
-  provider: 'RESEND' | 'SENDGRID' | 'AMAZON_SES' | 'POSTMARK' | 'SURPLUSX_TRANSACTIONAL';
+  provider: 'GMAIL_API' | 'GOOGLE_OAUTH_GMAIL' | 'SURPLUSX_TRANSACTIONAL';
   domainStatus: 'VALID' | 'INVALID' | 'DNS_CHECK_FAILED';
   deliveryStatus: 'DELIVERED' | 'BOUNCED' | 'FAILED' | 'PENDING';
   verificationStatus: EmailVerificationStatus;

@@ -751,7 +751,7 @@ async function startServer() {
   app.get('/api/internal/email-status', (req, res) => {
     res.json({
       success: true,
-      provider: 'Resend',
+      provider: 'GMAIL_API',
       isConfigured: emailService.isConfigured(),
       config: emailService.getConfigurationStatus(),
     });

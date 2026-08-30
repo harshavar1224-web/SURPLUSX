@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "surplusx-platform",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -22,12 +22,12 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "google-libphonenumber": "^3.2.46",
+    "googleapis": "^176.0.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "resend": "^6.25.0",
     "vite": "^6.2.3"
   },
   "devDependencies": {
