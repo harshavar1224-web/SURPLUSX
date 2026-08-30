@@ -22,7 +22,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { LocationCard } from '../location/LocationCard';
 
 export const ConsumerDashboard: React.FC = () => {
   const {
@@ -32,6 +31,7 @@ export const ConsumerDashboard: React.FC = () => {
     listings,
     setSelectedListing,
     orders,
+    activeDelivery,
     setSelectedOrderForTracking,
     setSelectedOrderForReceipt,
   } = useApp();
@@ -44,9 +44,6 @@ export const ConsumerDashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Center Main Dashboard Area */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Authoritative Live Location & Radius Card */}
-          <LocationCard variant="full" />
-
           {/* Welcome Header */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -130,7 +127,7 @@ export const ConsumerDashboard: React.FC = () => {
                     Order #{activeOrders[0].id} is on the way!
                   </div>
                   <div className="text-[11px] text-slate-300">
-                    Driver Rahul (Hope Foundation) • ETA ~8 mins
+                    {activeDelivery?.volunteerName || activeDelivery?.driverName || 'NGO Partner'} ({activeDelivery?.ngoName || 'Verified NGO'}) • {activeDelivery?.etaMinutes ? `ETA ~${activeDelivery.etaMinutes} mins` : 'Live Tracking Active'}
                   </div>
                 </div>
               </div>

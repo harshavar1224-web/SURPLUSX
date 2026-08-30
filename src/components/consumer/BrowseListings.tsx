@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Map,
   SlidersHorizontal,
@@ -13,12 +13,15 @@ import {
   Star,
   AlertCircle,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CategoryType, SurplusListing } from '../../types';
-import { LocationCard } from '../location/LocationCard';
 
 export const BrowseListings: React.FC = () => {
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const {
     listings,
     searchQuery,
@@ -105,9 +108,6 @@ export const BrowseListings: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* Location-Based Discovery & Radius Status Banner */}
-      <LocationCard variant="full" />
-
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -119,168 +119,213 @@ export const BrowseListings: React.FC = () => {
           </p>
         </div>
 
-        {/* View on Map Toggle Button */}
-        <button
-          onClick={() => setActiveView('map')}
-          className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs transition-all flex items-center gap-2 self-start sm:self-auto cursor-pointer"
-        >
-          <Map className="w-4 h-4 text-emerald-600" />
-          <span>View on Map</span>
-        </button>
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Toggle Filters Button */}
+          <button
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className={`px-4 py-2 text-xs font-bold rounded-xl border shadow-2xs hover:shadow-xs transition-all flex items-center gap-2 cursor-pointer ${
+              isFilterOpen || selectedCategory !== 'All' || selectedDietary.length > 0 || includeWiderMarketplace
+                ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-600/20'
+                : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            <span>Filters</span>
+            {isFilterOpen ? (
+              <ChevronUp className="w-3.5 h-3.5 ml-0.5 opacity-80" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 ml-0.5 opacity-80" />
+            )}
+            {(selectedCategory !== 'All' || selectedDietary.length > 0 || includeWiderMarketplace) && !isFilterOpen && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            )}
+          </button>
+
+          {/* View on Map Toggle Button */}
+          <button
+            onClick={() => setActiveView('map')}
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Map className="w-4 h-4 text-emerald-600" />
+            <span>View on Map</span>
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Filter Sidebar */}
-        <aside className="lg:col-span-3 bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-6">
+      {/* Expandable / Collapsible Filters Panel (Hidden by default) */}
+      {isFilterOpen && (
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-emerald-600" />
-              Filters
-            </span>
-            <button
-              onClick={() => {
-                setSelectedCategory('All');
-                setPriceRange([0, 500]);
-                setMaxDistanceKm(appliedDiscoveryRadius);
-                setSelectedDietary([]);
-                setSortBy('recommended');
-                setIncludeWiderMarketplace(false);
-              }}
-              className="text-[11px] font-medium text-emerald-600 hover:underline cursor-pointer"
-            >
-              Reset
-            </button>
-          </div>
-
-          {/* Wider Radius Toggle */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
-            <label className="flex items-start gap-2.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={includeWiderMarketplace}
-                onChange={(e) => setIncludeWiderMarketplace(e.target.checked)}
-                className="mt-0.5 rounded-sm border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
-              />
-              <div>
-                <span className="text-xs font-bold text-slate-800 block">Show items outside {appliedDiscoveryRadius} km</span>
-                <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
-                  Browse distant regional surplus (ordering requires matching proximity).
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
+                Filter & Sort Listings
+              </span>
+              {(selectedCategory !== 'All' || selectedDietary.length > 0 || includeWiderMarketplace) && (
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  Active Filters Applied
                 </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setSelectedCategory('All');
+                  setPriceRange([0, 500]);
+                  setMaxDistanceKm(appliedDiscoveryRadius);
+                  setSelectedDietary([]);
+                  setSortBy('recommended');
+                  setIncludeWiderMarketplace(false);
+                }}
+                className="text-xs font-semibold text-emerald-600 hover:underline cursor-pointer"
+              >
+                Reset All
+              </button>
+              <button
+                onClick={() => setIsFilterOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Hide Filters"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Categories */}
+            <div>
+              <label className="text-xs font-bold text-slate-900 block mb-2.5">Categories</label>
+              <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {categories.map((cat) => {
+                  const isSelected = selectedCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200'
+                          : 'text-slate-600 hover:bg-slate-50 border border-transparent'
+                      }`}
+                    >
+                      <span className="truncate">{cat}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
-            </label>
-          </div>
+            </div>
 
-          {/* Categories */}
-          <div>
-            <label className="text-xs font-bold text-slate-900 block mb-2.5">Categories</label>
-            <div className="space-y-1.5">
-              {categories.map((cat) => {
-                const isSelected = selectedCategory === cat;
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-emerald-50 text-emerald-700 font-bold'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{cat}</span>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
-                  </button>
-                );
-              })}
+            {/* Price Range & Sort */}
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between text-xs font-bold text-slate-900 mb-2">
+                  <span>Price Range</span>
+                  <span className="text-emerald-600 font-extrabold">Up to ₹{priceRange[1]}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="500"
+                  step="20"
+                  value={priceRange[1]}
+                  onChange={(e) => setPriceRange([0, Number(e.target.value)])}
+                  className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <span>₹0</span>
+                  <span>₹250</span>
+                  <span>₹500</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-900 block mb-1.5">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 outline-hidden focus:border-emerald-500 font-medium cursor-pointer"
+                >
+                  <option value="recommended">Recommended</option>
+                  <option value="distance">Distance: Nearest First</option>
+                  <option value="discount">Discount: Highest</option>
+                  <option value="price-asc">Price: Low to High</option>
+                  <option value="price-desc">Price: High to Low</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Dietary Preferences */}
+            <div>
+              <label className="text-xs font-bold text-slate-900 block mb-2">Dietary Options</label>
+              <div className="space-y-2">
+                {dietaryOptions.map((tag) => {
+                  const isChecked = selectedDietary.includes(tag);
+                  return (
+                    <label
+                      key={tag}
+                      className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer select-none"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDietary([...selectedDietary, tag]);
+                          } else {
+                            setSelectedDietary(selectedDietary.filter((t) => t !== tag));
+                          }
+                        }}
+                        className="rounded-sm border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                      />
+                      <span className="font-medium">{tag}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Platform Radius Policy & Wider Scope */}
+            <div className="space-y-3">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-900">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Discovery Radius</span>
+                  </span>
+                  <span className="text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md text-[11px] font-extrabold">
+                    {appliedDiscoveryRadius} km
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  Enforced for <strong>{appliedLocalityType}</strong> localities.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeWiderMarketplace}
+                    onChange={(e) => setIncludeWiderMarketplace(e.target.checked)}
+                    className="mt-0.5 rounded-sm border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">Show outside {appliedDiscoveryRadius} km</span>
+                    <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                      Regional surplus browsing.
+                    </span>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Price Range */}
-          <div>
-            <div className="flex items-center justify-between text-xs font-bold text-slate-900 mb-2">
-              <span>Price Range</span>
-              <span className="text-emerald-600">Up to ₹{priceRange[1]}</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="500"
-              step="20"
-              value={priceRange[1]}
-              onChange={(e) => setPriceRange([0, Number(e.target.value)])}
-              className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-            />
-            <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-              <span>₹0</span>
-              <span>₹250</span>
-              <span>₹500</span>
-            </div>
-          </div>
-
-          {/* Platform Discovery Radius Policy (Server-Authoritative) */}
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-900">
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Discovery Radius</span>
-              </span>
-              <span className="text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md text-[11px] font-extrabold">
-                {appliedDiscoveryRadius} km
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-tight">
-              Server-enforced platform policy for <strong>{appliedLocalityType}</strong> localities. Orders require verified geographic proximity.
-            </p>
-          </div>
-
-          {/* Dietary Preferences */}
-          <div>
-            <label className="text-xs font-bold text-slate-900 block mb-2">Dietary</label>
-            <div className="space-y-1.5">
-              {dietaryOptions.map((tag) => {
-                const isChecked = selectedDietary.includes(tag);
-                return (
-                  <label
-                    key={tag}
-                    className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer select-none"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedDietary([...selectedDietary, tag]);
-                        } else {
-                          setSelectedDietary(selectedDietary.filter((t) => t !== tag));
-                        }
-                      }}
-                      className="rounded-sm border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
-                    />
-                    <span>{tag}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Sort By */}
-          <div>
-            <label className="text-xs font-bold text-slate-900 block mb-2">Sort By</label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-2 text-slate-800 outline-hidden focus:border-emerald-500"
-            >
-              <option value="recommended">Recommended</option>
-              <option value="distance">Distance: Nearest First</option>
-              <option value="discount">Discount: Highest</option>
-              <option value="price-asc">Price: Low to High</option>
-              <option value="price-desc">Price: High to Low</option>
-            </select>
-          </div>
-        </aside>
-
-        {/* Main Listing Grid */}
-        <main className="lg:col-span-9">
+      {/* Main Listing Grid (Full Width) */}
+      <main>
           {sortedListings.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center">
               <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -423,7 +468,6 @@ export const BrowseListings: React.FC = () => {
             </div>
           )}
         </main>
-      </div>
     </div>
   );
 };

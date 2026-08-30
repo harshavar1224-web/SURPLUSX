@@ -336,8 +336,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
-          {/* Left: Brand Logo & Navigation */}
-          <div className="flex items-center gap-8">
+          {/* Left: Brand Logo */}
+          <div className="flex items-center gap-4">
             <button
               onClick={() => setActiveView(currentUser ? 'dashboard' : 'landing')}
               className="flex items-center gap-2 focus:outline-hidden hover:opacity-90 transition-opacity"
@@ -345,9 +345,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
             >
               <SurplusXLogo size="md" />
             </button>
-
-            {/* Role-Specific Nav Links (rendered based on active role) */}
-            {renderNavLinks()}
           </div>
 
           {/* Center Search Bar (shown on desktop) */}

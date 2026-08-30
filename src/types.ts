@@ -375,7 +375,7 @@ export interface PhoneVerification {
   userId?: string;
   phone: string;
   normalizedPhone: string;
-  provider: 'TWILIO_VERIFY' | 'TELECOM_DIRECT' | 'SURPLUSX_SECURE_GATEWAY';
+  provider: '2FACTOR' | 'TWO_FACTOR';
   verificationStatus: PhoneVerificationStatus;
   riskLevel: PhoneRiskLevel;
   carrier?: string;
@@ -388,22 +388,23 @@ export interface PhoneVerification {
   updatedAt: string;
 }
 
-export interface OTPVerificationSession {
+export interface PhoneVerificationSession {
   id: string;
   phone: string;
   normalizedPhone: string;
+  provider: '2FACTOR';
+  provider_session_id?: string;
   purpose: OTPPurpose;
-  expiresAt: string;
-  attemptCount: number;
-  maxAttempts: number;
-  resendAvailableAt: string;
-  verifiedAt?: string;
+  status: 'PENDING' | 'VERIFIED' | 'EXPIRED' | 'FAILED';
+  attempt_count: number;
+  expires_at: string;
+  verified_at?: string;
+  created_at: string;
+  updated_at: string;
   verificationToken?: string;
-  createdAt: string;
-  // Dev mode indicator if simulated OTP mode is active
-  isDemoMode?: boolean;
-  demoOtpCode?: string;
 }
+
+export type OTPVerificationSession = PhoneVerificationSession;
 
 export interface BlockedPhone {
   id: string;
@@ -702,10 +703,17 @@ export interface DeliveryLocation {
 export interface DeliveryTracking {
   id: string;
   orderOrDonationId: string;
+  orderId?: string;
+  ngoId?: string;
+  ngoName?: string;
   type: 'CONSUMER_ORDER' | 'NGO_DONATION';
   driverId?: string;
   driverName: string;
   driverPhone: string;
+  volunteerName?: string;
+  deliveryPersonId?: string;
+  deliveryPersonName?: string;
+  deliveryPersonVehicle?: string;
   vehicleType?: 'E-Bike' | 'Motorcycle' | 'Mini-Van' | 'Bicycle';
   currentLocation: {
     lat: number;
@@ -715,6 +723,20 @@ export interface DeliveryTracking {
     accuracy?: number;
     lastUpdated: string;
   };
+  pickupLocation?: { lat: number; lng: number; address: string };
+  dropoffLocation?: { lat: number; lng: number; address: string };
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  pickupAddress?: string;
+  dropoffLatitude?: number;
+  dropoffLongitude?: number;
+  dropoffAddress?: string;
+  currentLatitude?: number;
+  currentLongitude?: number;
+  currentAccuracy?: number;
+  currentSpeed?: number;
+  currentHeading?: number;
+  currentAddress?: string;
   origin: {
     name: string;
     address: string;
@@ -729,9 +751,17 @@ export interface DeliveryTracking {
   };
   etaMinutes: number;
   distanceKm: number;
+  distanceRemainingKm?: number;
+  totalDistanceTravelledKm?: number;
   status: DeliveryState;
   pickupOtp: string;
   dropOtp: string;
+  pickupCode?: string;
+  deliveryOtp?: string;
+  routeGeometry?: Array<[number, number]>;
+  travelledTrail?: Array<[number, number]>;
+  connectionStatus?: 'LIVE' | 'STALE' | 'OFFLINE';
+  lowAccuracyFlag?: boolean;
   proofImageUrl?: string;
   batteryLevel?: number;
   isRealGpsActive: boolean;
@@ -750,6 +780,9 @@ export interface DeliveryTracking {
   networkStatus: 'ONLINE' | 'OFFLINE' | 'DEGRADED';
   driverStatus: 'MOVING' | 'STATIONARY' | 'OFFLINE' | 'AT_PICKUP' | 'AT_DROP';
 }
+
+export type DeliveryTrackingStatus = DeliveryState;
+export type DeliveryTelemetry = DeliveryTracking;
 
 export interface DistributionRecord {
   id: string;

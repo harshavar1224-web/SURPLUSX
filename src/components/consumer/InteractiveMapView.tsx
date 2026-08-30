@@ -14,10 +14,12 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SurplusListing, CategoryType } from '../../types';
 import { LocationCard } from '../location/LocationCard';
+import { mapplsClient } from '../../services/mapplsClient';
 
 export const InteractiveMapView: React.FC = () => {
   const {
@@ -42,6 +44,8 @@ export const InteractiveMapView: React.FC = () => {
 
   const [selectedMapItem, setSelectedMapItem] = useState<SurplusListing | null>(null);
   const [showRadiusBoundary, setShowRadiusBoundary] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
 
   const categories: ('All' | CategoryType)[] = [
     'All',
@@ -62,38 +66,67 @@ export const InteractiveMapView: React.FC = () => {
     return true;
   });
 
-  // 1. Initialize Map
+  // 1. Initialize Map with Mappls GIS Platform
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: [userLocation.latitude, userLocation.longitude],
-        zoom: appliedLocalityType === 'VILLAGE' ? 12 : 13,
-        zoomControl: false,
-      });
+    let isSubscribed = true;
 
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
+    async function initMapplsMap() {
+      try {
+        const config = await mapplsClient.getConfig();
+        const mapKey = config.mapKey;
 
-      // OpenStreetMap Tile Layer
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      }).addTo(map);
+        if (!mapInstanceRef.current && mapContainerRef.current) {
+          const map = L.map(mapContainerRef.current, {
+            center: [userLocation.latitude, userLocation.longitude],
+            zoom: appliedLocalityType === 'VILLAGE' ? 12 : 13,
+            zoomControl: false,
+          });
 
-      const markersGroup = L.layerGroup().addTo(map);
-      markersLayerRef.current = markersGroup;
-      mapInstanceRef.current = map;
+          L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+          // Official Mappls Vector Layer
+          const mapplsTileUrl = mapKey
+            ? `https://apis.mappls.com/advancedmaps/v1/${mapKey}/still_map/vector/{z}/{x}/{y}.png`
+            : `https://apis.mappls.com/advancedmaps/v1/map_sdk/vector/{z}/{x}/{y}.png`;
+
+          const tileLayer = L.tileLayer(mapplsTileUrl, {
+            maxZoom: 19,
+            tileSize: 256,
+          });
+
+          tileLayer.on('tileerror', () => {
+            if (isSubscribed && !config.isConfigured) {
+              setMapError('Map service temporarily unavailable. Please verify Mappls Web Map credentials.');
+            }
+          });
+
+          tileLayer.addTo(map);
+
+          const markersGroup = L.layerGroup().addTo(map);
+          markersLayerRef.current = markersGroup;
+          mapInstanceRef.current = map;
+        }
+      } catch (err) {
+        if (isSubscribed) {
+          console.error('[Mappls Interactive View] Map initialization error:', err);
+          setMapError('Map service temporarily unavailable.');
+        }
+      }
     }
 
+    initMapplsMap();
+
     return () => {
+      isSubscribed = false;
       // Cleanup on unmount
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [isRetrying]);
 
   // 2. Update User Location & Radius Circle
   useEffect(() => {
@@ -303,6 +336,26 @@ export const InteractiveMapView: React.FC = () => {
       <div className="relative w-full h-[540px] rounded-3xl overflow-hidden border border-slate-300 shadow-md bg-slate-100">
         {/* Leaflet map DOM node */}
         <div id="leaflet-map-canvas" ref={mapContainerRef} className="w-full h-full z-0" />
+
+        {/* Map Error Overlay */}
+        {mapError && (
+          <div className="absolute top-4 left-4 right-4 z-10 bg-rose-900/90 backdrop-blur-md text-white p-3.5 rounded-2xl border border-rose-500/30 shadow-xl flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{mapError}</span>
+            </div>
+            <button
+              onClick={() => {
+                setIsRetrying((prev) => !prev);
+                setMapError(null);
+              }}
+              className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
 
         {/* Selected Item Bottom Card Preview (Floating inside Map) */}
         {selectedMapItem && (

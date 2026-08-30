@@ -1038,7 +1038,6 @@ class AccountIdentityDatabase {
     sessionId?: string;
     normalizedPhone?: string;
     maskedPhone?: string;
-    demoOtpCode?: string;
     error?: string;
     code?: string;
   }> {
@@ -1108,7 +1107,6 @@ class AccountIdentityDatabase {
       sessionId: otpResult.sessionId,
       normalizedPhone: normNewPhone,
       maskedPhone: phoneIntelligence.maskedPhone,
-      demoOtpCode: otpResult.demoOtpCode,
     };
   }
 
@@ -1139,7 +1137,7 @@ class AccountIdentityDatabase {
       const normNewPhone = phoneIntelligence.normalizedPhone;
 
       // Verify OTP with purpose PHONE_CHANGE
-      const otpVerify = phoneVerificationService.verifyOTP({
+      const otpVerify = await phoneVerificationService.verifyOTP({
         sessionId: params.sessionId,
         phone: normNewPhone,
         otpCode: params.otpCode,

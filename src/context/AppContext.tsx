@@ -1906,7 +1906,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       },
       (error) => {
         console.warn('GPS location tracking notice:', error.message);
-        triggerToast('GPS access notice: Tracking active using road telemetry simulation.', 'info');
+        triggerToast('GPS access notice: Please enable location services on your device for accurate tracking.', 'warning');
       },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
     );

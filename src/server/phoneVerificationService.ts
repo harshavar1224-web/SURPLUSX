@@ -1,14 +1,18 @@
 /**
- * SurplusX Authoritative Phone Verification & Phone Intelligence Service
+ * SurplusX Authoritative Phone Verification Service — Exclusively 2Factor.in Powered
  * 
- * Production-Grade Implementation adhering strictly to:
- * 1. India Mobile Number Validation & E.164 Normalization (+91XXXXXXXXXX)
- * 2. Strict Phone Intelligence & Carrier / Line Type / Disposable / VoIP / Spam Risk Analysis
- * 3. Cryptographic OTP Verification (5 min expiry, 5 max attempts, 45s resend cooldown, secure hash)
- * 4. Multi-Tier Rate Limiting (Per-Phone, Per-IP, Per-Device)
- * 5. One Verified Mobile = One SurplusX Account = One Role
- * 6. Privacy Protection (Masking, Non-Disclosing Safe Error Messaging)
- * 7. Admin Overrides with Mandatory Audit Logging
+ * Production-Grade Architecture:
+ * 1. Provider: 2Factor.in Official SMS Gateway (https://2factor.in)
+ *    - Send OTP: https://2factor.in/API/V1/{API_KEY}/SMS/{PHONE_NUMBER}/AUTOGEN
+ *    - Verify OTP: https://2factor.in/API/V1/{API_KEY}/SMS/VERIFY/{SESSION_ID}/{OTP}
+ *    - Verify3 Fallback: https://2factor.in/API/V1/{API_KEY}/SMS/VERIFY3/{PHONE_NUMBER}/{OTP}
+ * 2. Real Telecom SMS Delivery directly to user's physical mobile handset.
+ * 3. Zero Mock / Fake / Frontend / Demo OTP: Plaintext OTP is NEVER generated on frontend,
+ *    NEVER returned in API responses, NEVER stored, NEVER logged, and NEVER shown in the UI.
+ * 4. India Mobile Number Validation & E.164 Normalization (+91XXXXXXXXXX).
+ * 5. Multi-Tier Rate Limiting (Per-Phone, Per-IP, Per-Device).
+ * 6. SurplusX Uniqueness Enforcement (One Mobile = One Account = One Role).
+ * 7. Single-Use Cryptographic Verification Tokens (15-min TTL) for transactional registration.
  */
 
 import libphonenumber from 'google-libphonenumber';
@@ -16,21 +20,16 @@ import crypto from 'crypto';
 import {
   PhoneIntelligence,
   PhoneVerification,
-  OTPVerificationSession,
+  PhoneVerificationSession,
   BlockedPhone,
-  PhoneRiskLevel,
   PhoneLineType,
   PhoneLineStatus,
   OTPPurpose,
   BlockedPhoneReason,
-  PhoneVerificationStatus,
 } from '../types';
 
 const { PhoneNumberUtil, PhoneNumberFormat, PhoneNumberType } = libphonenumber;
 const phoneUtil = PhoneNumberUtil.getInstance();
-
-// Server-side HMAC secret for OTP hashing
-const OTP_HASH_SECRET = process.env.OTP_SECRET_KEY || 'surplusx-super-secure-telecom-otp-secret-2026';
 
 // India Mobile Carrier Prefix Map (HLR / MSC Telecom Allocation Blocks)
 const INDIA_CARRIER_PREFIXES: { prefix: string; carrier: string }[] = [
@@ -69,17 +68,18 @@ const INDIA_CARRIER_PREFIXES: { prefix: string; carrier: string }[] = [
 // Disposable & Virtual SMS gateway test prefix patterns
 const KNOWN_DISPOSABLE_PREFIXES = ['+9199999', '+9188888', '+9177777', '+9100000', '+9111111'];
 
-export interface StoredOTPSession {
+export interface Stored2FactorSession {
   id: string;
   phone: string;
   normalizedPhone: string;
+  nationalNumber: string;
+  providerSessionId: string;
   purpose: OTPPurpose;
-  otpHash: string;
-  rawCodeForDev?: string; // Only stored in development mode for preview testing
-  expiresAt: number; // Unix ms
+  status: 'PENDING' | 'VERIFIED' | 'EXPIRED' | 'FAILED';
+  expiresAt: number; // Unix ms (10 minutes)
   attemptCount: number;
   maxAttempts: number;
-  resendAvailableAt: number; // Unix ms
+  resendAvailableAt: number; // Unix ms (45s cooldown)
   verifiedAt?: number;
   verificationToken?: string;
   tokenExpiresAt?: number;
@@ -97,12 +97,12 @@ export class PhoneVerificationService {
 
   // In-Memory Database for Phone Verifications, Sessions, and Blocked Numbers
   private phoneVerifications = new Map<string, PhoneVerification>(); // normalizedPhone -> PhoneVerification
-  private otpSessions = new Map<string, StoredOTPSession>(); // sessionId -> StoredOTPSession
+  private sessions = new Map<string, Stored2FactorSession>(); // sessionId -> Stored2FactorSession
   private activeSessionByPhoneAndPurpose = new Map<string, string>(); // "phone:purpose" -> sessionId
   private verifiedTokens = new Map<string, { phone: string; purpose: OTPPurpose; expiresAt: number }>();
   private blockedNumbers = new Map<string, BlockedPhone>(); // normalizedPhone -> BlockedPhone
 
-  // Rate Limiting Buckets
+  // Multi-Tier Rate Limiting Buckets
   private phoneRateLimits = new Map<string, RateLimitEntry>();
   private ipRateLimits = new Map<string, RateLimitEntry>();
   private deviceRateLimits = new Map<string, RateLimitEntry>();
@@ -118,8 +118,35 @@ export class PhoneVerificationService {
     return PhoneVerificationService.instance;
   }
 
+  /**
+   * Get 2Factor API Key securely from server environment
+   */
+  private getApiKey(): string {
+    return (process.env.TWO_FACTOR_API_KEY || '').trim();
+  }
+
+  /**
+   * Check if 2Factor.in is configured
+   */
+  public isConfigured(): boolean {
+    return !!this.getApiKey();
+  }
+
+  /**
+   * Safe Diagnostic Status (NEVER reveals API key or secrets)
+   */
+  public getConfigurationStatus() {
+    const key = this.getApiKey();
+    return {
+      provider: '2FACTOR.IN',
+      isConfigured: !!key,
+      hasApiKey: !!key,
+      keyPrefix: key ? `${key.slice(0, 6)}...` : 'not_set',
+      gatewayUrl: 'https://2factor.in/API/V1/',
+    };
+  }
+
   private seedInitialBlockedNumbers() {
-    // Blocked suspicious test spam bot numbers for demonstration
     const blockedSeeds: BlockedPhone[] = [
       {
         id: 'block-001',
@@ -147,11 +174,31 @@ export class PhoneVerificationService {
   }
 
   /**
-   * 1. Normalize Phone Number to Canonical E.164 (+91XXXXXXXXXX)
+   * Helper to mask phone numbers for safe logging and UI display (e.g., +91 ******3210)
    */
-  public normalizePhone(rawPhone: string, defaultCountry = 'IN'): { normalized: string; valid: boolean; error?: string } {
+  public maskPhone(phone: string): string {
+    if (!phone) return '';
+    const norm = phone.replace(/[\s\-]/g, '');
+    if (norm.startsWith('+91') && norm.length === 13) {
+      return `+91 ******${norm.slice(9)}`;
+    }
+    if (norm.length >= 10) {
+      return `******${norm.slice(-4)}`;
+    }
+    return '******';
+  }
+
+  /**
+   * 1. Normalize Phone Number to Canonical E.164 (+91XXXXXXXXXX) and National 10 Digits
+   */
+  public normalizePhone(rawPhone: string, defaultCountry = 'IN'): {
+    normalized: string;
+    nationalNumber: string;
+    valid: boolean;
+    error?: string;
+  } {
     if (!rawPhone || typeof rawPhone !== 'string') {
-      return { normalized: '', valid: false, error: 'Mobile number is required.' };
+      return { normalized: '', nationalNumber: '', valid: false, error: 'Mobile number is required.' };
     }
 
     const trimmed = rawPhone.trim().replace(/[\s\-\(\)\.]/g, '');
@@ -171,6 +218,7 @@ export class PhoneVerificationService {
       if (!phoneUtil.isValidNumber(parsedNumber)) {
         return {
           normalized: '',
+          nationalNumber: '',
           valid: false,
           error: 'Please enter a valid 10-digit Indian mobile number.',
         };
@@ -181,6 +229,7 @@ export class PhoneVerificationService {
       if (countryCode !== 91) {
         return {
           normalized: '',
+          nationalNumber: '',
           valid: false,
           error: 'SurplusX is currently operational only for Indian mobile numbers (+91).',
         };
@@ -196,6 +245,7 @@ export class PhoneVerificationService {
       ) {
         return {
           normalized: '',
+          nationalNumber: '',
           valid: false,
           error: 'Fixed landline, toll-free, and VoIP numbers cannot receive SMS OTP. Please enter a valid mobile number.',
         };
@@ -208,6 +258,7 @@ export class PhoneVerificationService {
       if (nationalNumber.length !== 10 || !/^[6-9]/.test(nationalNumber)) {
         return {
           normalized: '',
+          nationalNumber: '',
           valid: false,
           error: 'Indian mobile numbers must be 10 digits starting with 6, 7, 8, or 9.',
         };
@@ -215,11 +266,13 @@ export class PhoneVerificationService {
 
       return {
         normalized: formattedE164,
+        nationalNumber,
         valid: true,
       };
     } catch (err: any) {
       return {
         normalized: '',
+        nationalNumber: '',
         valid: false,
         error: 'Invalid mobile number format.',
       };
@@ -252,7 +305,7 @@ export class PhoneVerificationService {
     }
 
     const normalized = normResult.normalized;
-    const nationalNumber = normalized.replace('+91', '');
+    const nationalNumber = normResult.nationalNumber;
     const displayFormatted = `+91 ${nationalNumber.slice(0, 5)} ${nationalNumber.slice(5)}`;
     const masked = `+91 ******${nationalNumber.slice(6)}`;
 
@@ -330,13 +383,12 @@ export class PhoneVerificationService {
   }
 
   /**
-   * 3. Check Rate Limits (Phone, IP, Device)
+   * 3. Check Multi-Tier Rate Limits (Phone, IP, Device)
    */
   public checkRateLimits(phone: string, ip: string, deviceId?: string): { allowed: boolean; retryAfterSeconds?: number; error?: string } {
     const now = Date.now();
     const WINDOW_15_MIN = 15 * 60 * 1000;
 
-    // Helper: clean old entries and count within window
     const cleanAndCount = (map: Map<string, RateLimitEntry>, key: string, limit: number): { allowed: boolean; remaining: number } => {
       let entry = map.get(key);
       if (!entry) {
@@ -350,8 +402,8 @@ export class PhoneVerificationService {
       return { allowed: true, remaining: limit - entry.requests.length };
     };
 
-    // A. Phone Rate Limit: Max 4 OTPs per 15 minutes
-    const phoneLimit = cleanAndCount(this.phoneRateLimits, phone, 4);
+    // A. Phone Rate Limit: Max 5 OTP requests per 15 minutes
+    const phoneLimit = cleanAndCount(this.phoneRateLimits, phone, 5);
     if (!phoneLimit.allowed) {
       return {
         allowed: false,
@@ -360,8 +412,8 @@ export class PhoneVerificationService {
       };
     }
 
-    // B. IP Rate Limit: Max 20 OTPs per 15 minutes
-    const ipLimit = cleanAndCount(this.ipRateLimits, ip, 20);
+    // B. IP Rate Limit: Max 25 OTP requests per 15 minutes
+    const ipLimit = cleanAndCount(this.ipRateLimits, ip, 25);
     if (!ipLimit.allowed) {
       return {
         allowed: false,
@@ -370,9 +422,9 @@ export class PhoneVerificationService {
       };
     }
 
-    // C. Device Rate Limit: Max 8 OTPs per 15 minutes
+    // C. Device Rate Limit: Max 10 OTP requests per 15 minutes
     if (deviceId) {
-      const deviceLimit = cleanAndCount(this.deviceRateLimits, deviceId, 8);
+      const deviceLimit = cleanAndCount(this.deviceRateLimits, deviceId, 10);
       if (!deviceLimit.allowed) {
         return {
           allowed: false,
@@ -402,65 +454,63 @@ export class PhoneVerificationService {
   }
 
   /**
-   * 4. Hash an OTP code securely (Never store plaintext)
-   */
-  public hashOtp(code: string, phone: string): string {
-    return crypto
-      .createHmac('sha256', OTP_HASH_SECRET)
-      .update(`${phone}:${code.trim()}`)
-      .digest('hex');
-  }
-
-  /**
-   * 5. Generate and Send OTP
+   * 4. Request Real SMS OTP through 2Factor.in AUTOGEN API
    */
   public async sendOTP(params: {
     phone: string;
-    purpose: OTPPurpose;
+    purpose?: OTPPurpose;
     clientIp: string;
     deviceId?: string;
   }): Promise<{
     success: boolean;
+    status: 'SMS_OTP_SENT' | 'PHONE_INVALID' | 'PHONE_HIGH_RISK' | 'RESEND_COOLDOWN_ACTIVE' | 'OTP_LIMIT_REACHED' | 'SMS_PROVIDER_ERROR' | 'PHONE_REGISTERED';
     sessionId?: string;
+    verificationSessionId?: string;
     normalizedPhone?: string;
+    maskedPhone?: string;
     expiresInSeconds?: number;
     resendAvailableInSeconds?: number;
-    maskedPhone?: string;
     error?: string;
     code?: string;
-    demoOtpCode?: string; // Included only in dev environment for testing
   }> {
-    const { phone, purpose, clientIp, deviceId } = params;
+    const { phone, purpose = 'SIGNUP', clientIp, deviceId } = params;
 
-    // Step A: Phone Intelligence & Validation Check
-    const intelligence = this.lookupPhone(phone);
-    if (!intelligence.valid || !intelligence.normalizedPhone) {
+    // Step A: Phone Normalization & Validation
+    const normResult = this.normalizePhone(phone);
+    if (!normResult.valid || !normResult.normalized) {
       return {
         success: false,
-        error: intelligence.safeErrorMessage || 'Invalid mobile number. Please enter a valid Indian mobile number.',
+        status: 'PHONE_INVALID',
+        error: normResult.error || 'Please enter a valid 10-digit Indian mobile number.',
         code: 'INVALID_PHONE',
       };
     }
 
-    if (!intelligence.reachable || intelligence.riskLevel === 'BLOCKED' || intelligence.isDisposable) {
+    const normalizedPhone = normResult.normalized;
+    const nationalNumber = normResult.nationalNumber;
+    const maskedPhone = this.maskPhone(normalizedPhone);
+
+    // Step B: Phone Intelligence Check
+    const intelligence = this.lookupPhone(phone);
+    if (!intelligence.valid || !intelligence.reachable || intelligence.riskLevel === 'BLOCKED' || intelligence.isDisposable) {
       return {
         success: false,
-        error: intelligence.safeErrorMessage || "We couldn't verify this mobile number. Please use another valid mobile number or contact SurplusX support.",
+        status: 'PHONE_HIGH_RISK',
+        error: intelligence.safeErrorMessage || "We couldn't verify this mobile number. Please check the number and try again.",
         code: intelligence.isDisposable ? 'DISPOSABLE_PHONE_REJECTED' : 'PHONE_HIGH_RISK',
       };
     }
 
-    const normalizedPhone = intelligence.normalizedPhone;
-
-    // Step B: Check Active Session Resend Cooldown
+    // Step C: Check Resend Cooldown
     const sessionLookupKey = `${normalizedPhone}:${purpose}`;
     const existingSessionId = this.activeSessionByPhoneAndPurpose.get(sessionLookupKey);
     if (existingSessionId) {
-      const existingSession = this.otpSessions.get(existingSessionId);
+      const existingSession = this.sessions.get(existingSessionId);
       if (existingSession && Date.now() < existingSession.resendAvailableAt) {
         const remainingCooldownSeconds = Math.ceil((existingSession.resendAvailableAt - Date.now()) / 1000);
         return {
           success: false,
+          status: 'RESEND_COOLDOWN_ACTIVE',
           error: `Please wait ${remainingCooldownSeconds} seconds before requesting a new verification code.`,
           code: 'RESEND_COOLDOWN_ACTIVE',
           resendAvailableInSeconds: remainingCooldownSeconds,
@@ -468,236 +518,404 @@ export class PhoneVerificationService {
       }
     }
 
-    // Step C: Rate Limiting
+    // Step D: Rate Limiting
     const rateLimitCheck = this.checkRateLimits(normalizedPhone, clientIp, deviceId);
     if (!rateLimitCheck.allowed) {
       return {
         success: false,
+        status: 'OTP_LIMIT_REACHED',
         error: rateLimitCheck.error || 'Too many verification requests. Please try again later.',
-        code: 'RATE_LIMIT_EXCEEDED',
+        code: 'OTP_LIMIT_REACHED',
       };
     }
 
-    // Step D: Generate Cryptographic 6-Digit Code
-    const randomBuffer = crypto.randomBytes(3);
-    const numericCode = (parseInt(randomBuffer.toString('hex'), 16) % 900000 + 100000).toString();
-    const otpHash = this.hashOtp(numericCode, normalizedPhone);
+    // Step E: Check 2Factor API Key
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      const err = 'TWO_FACTOR_API_KEY is not configured on the server. Please configure TWO_FACTOR_API_KEY in environment variables.';
+      console.warn(`[2Factor.in] Cannot dispatch SMS to ${maskedPhone}: ${err}`);
+      return {
+        success: false,
+        status: 'SMS_PROVIDER_ERROR',
+        error: 'SMS verification service is temporarily unavailable. Please try again.',
+        code: 'PROVIDER_NOT_CONFIGURED',
+      };
+    }
 
-    const now = Date.now();
-    const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
-    const RESEND_COOLDOWN_MS = 45 * 1000; // 45 seconds
+    // Step F: Dispatch Real SMS OTP via 2Factor.in API
+    try {
+      console.log(`[2Factor.in] Requesting SMS OTP dispatch for ${maskedPhone}...`);
+      const twoFactorUrl = `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/${encodeURIComponent(nationalNumber)}/AUTOGEN`;
 
-    const sessionId = `otp_sess_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+      const response = await fetch(twoFactorUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
 
-    const newSession: StoredOTPSession = {
-      id: sessionId,
-      phone,
-      normalizedPhone,
-      purpose,
-      otpHash,
-      rawCodeForDev: numericCode, // Held in memory for frictionless developer testing & automated review
-      expiresAt: now + OTP_EXPIRY_MS,
-      attemptCount: 0,
-      maxAttempts: 5,
-      resendAvailableAt: now + RESEND_COOLDOWN_MS,
-      clientIp,
-      deviceId,
-      createdAt: now,
-    };
+      const data: any = await response.json().catch(() => null);
 
-    // Store Session
-    this.otpSessions.set(sessionId, newSession);
-    this.activeSessionByPhoneAndPurpose.set(sessionLookupKey, sessionId);
-    this.recordRateLimitHit(normalizedPhone, clientIp, deviceId);
+      if (!response.ok || !data || data.Status !== 'Success') {
+        const errorDetail = data?.Details || data?.Message || `HTTP ${response.status}`;
+        console.warn(`[2Factor.in] SMS dispatch rejected for ${maskedPhone}: ${errorDetail}`);
 
-    // Create or Update PhoneVerification Record to PENDING
-    const existingVerif = this.phoneVerifications.get(normalizedPhone);
-    const verifRecord: PhoneVerification = {
-      id: existingVerif?.id || `pv_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`,
-      phone,
-      normalizedPhone,
-      provider: 'SURPLUSX_SECURE_GATEWAY',
-      verificationStatus: 'PENDING',
-      riskLevel: intelligence.riskLevel,
-      carrier: intelligence.carrier,
-      lineType: intelligence.lineType,
-      lineStatus: intelligence.lineStatus || 'ACTIVE',
-      country: 'IN',
-      attemptCount: (existingVerif?.attemptCount || 0) + 1,
-      createdAt: existingVerif?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    this.phoneVerifications.set(normalizedPhone, verifRecord);
+        if (typeof errorDetail === 'string' && errorDetail.toLowerCase().includes('invalid mobile')) {
+          return {
+            success: false,
+            status: 'PHONE_INVALID',
+            error: "Please enter a valid mobile number.",
+            code: 'INVALID_MOBILE_NUMBER',
+          };
+        }
 
-    // In a production Twilio setup:
-    // await twilioClient.messages.create({ to: normalizedPhone, body: `Your SurplusX verification code is: ${numericCode}. Valid for 5 minutes. Do not share this with anyone.` });
+        return {
+          success: false,
+          status: 'SMS_PROVIDER_ERROR',
+          error: 'Unable to send the SMS verification code. Please try again.',
+          code: '2FACTOR_DISPATCH_FAILED',
+        };
+      }
 
-    return {
-      success: true,
-      sessionId,
-      normalizedPhone,
-      expiresInSeconds: 300,
-      resendAvailableInSeconds: 45,
-      maskedPhone: intelligence.maskedPhone,
-      demoOtpCode: numericCode, // Safe demo hint in development
-    };
+      // 2Factor returns session ID in `Details` field
+      const providerSessionId = data.Details;
+      console.log(`[2Factor.in] 2Factor SMS OTP request accepted for ${maskedPhone}`);
+
+      const now = Date.now();
+      const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+      const RESEND_COOLDOWN_MS = 45 * 1000; // 45 seconds cooldown
+
+      const sessionId = `2f_sess_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+
+      const newSession: Stored2FactorSession = {
+        id: sessionId,
+        phone,
+        normalizedPhone,
+        nationalNumber,
+        providerSessionId,
+        purpose,
+        status: 'PENDING',
+        expiresAt: now + OTP_EXPIRY_MS,
+        attemptCount: 0,
+        maxAttempts: 5,
+        resendAvailableAt: now + RESEND_COOLDOWN_MS,
+        clientIp,
+        deviceId,
+        createdAt: now,
+      };
+
+      // Store verification session
+      this.sessions.set(sessionId, newSession);
+      this.activeSessionByPhoneAndPurpose.set(sessionLookupKey, sessionId);
+      this.recordRateLimitHit(normalizedPhone, clientIp, deviceId);
+
+      // Create or Update PhoneVerification Record to PENDING
+      const existingVerif = this.phoneVerifications.get(normalizedPhone);
+      const verifRecord: PhoneVerification = {
+        id: existingVerif?.id || `pv_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`,
+        phone,
+        normalizedPhone,
+        provider: '2FACTOR',
+        verificationStatus: 'PENDING',
+        riskLevel: intelligence.riskLevel,
+        carrier: intelligence.carrier,
+        lineType: intelligence.lineType,
+        lineStatus: intelligence.lineStatus || 'ACTIVE',
+        country: 'IN',
+        attemptCount: (existingVerif?.attemptCount || 0) + 1,
+        createdAt: existingVerif?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      this.phoneVerifications.set(normalizedPhone, verifRecord);
+
+      return {
+        success: true,
+        status: 'SMS_OTP_SENT',
+        sessionId,
+        verificationSessionId: sessionId,
+        normalizedPhone,
+        maskedPhone,
+        expiresInSeconds: 600,
+        resendAvailableInSeconds: 45,
+      };
+    } catch (err: any) {
+      console.warn(`[2Factor.in] Network exception dispatching SMS to ${maskedPhone}: ${err.message || err}`);
+      return {
+        success: false,
+        status: 'SMS_PROVIDER_ERROR',
+        error: 'SMS verification service is temporarily unavailable. Please try again.',
+        code: 'NETWORK_ERROR',
+      };
+    }
   }
 
   /**
-   * 6. Verify OTP Code
+   * 5. Verify Real SMS OTP with 2Factor.in VERIFY Endpoint
    */
-  public verifyOTP(params: {
+  public async verifyOTP(params: {
     sessionId?: string;
+    verificationSessionId?: string;
     phone: string;
-    otpCode: string;
-    purpose: OTPPurpose;
+    otpCode?: string;
+    otp?: string;
+    purpose?: OTPPurpose;
     clientIp: string;
-  }): {
+  }): Promise<{
     success: boolean;
+    status: 'PHONE_VERIFIED' | 'OTP_INVALID' | 'OTP_EXPIRED' | 'OTP_LIMIT_REACHED' | 'SMS_PROVIDER_ERROR' | 'SMS_OTP_VERIFICATION_REQUIRED' | 'PHONE_INVALID';
     verificationToken?: string;
     normalizedPhone?: string;
     phoneVerification?: PhoneVerification;
     remainingAttempts?: number;
     error?: string;
     code?: string;
-  } {
-    const { sessionId, phone, otpCode, purpose } = params;
+  }> {
+    const { phone, purpose = 'SIGNUP' } = params;
+    const rawOtp = (params.otp || params.otpCode || '').trim();
+    const effectiveSessionId = params.verificationSessionId || params.sessionId;
 
     const normResult = this.normalizePhone(phone);
     if (!normResult.valid || !normResult.normalized) {
       return {
         success: false,
-        error: 'Invalid mobile number.',
+        status: 'PHONE_INVALID',
+        error: 'Please enter a valid 10-digit Indian mobile number.',
         code: 'INVALID_PHONE',
       };
     }
 
     const normalizedPhone = normResult.normalized;
-    let session: StoredOTPSession | undefined;
+    const nationalNumber = normResult.nationalNumber;
+    const maskedPhone = this.maskPhone(normalizedPhone);
 
-    if (sessionId) {
-      session = this.otpSessions.get(sessionId);
+    if (!rawOtp || !/^\d{4,8}$/.test(rawOtp)) {
+      return {
+        success: false,
+        status: 'OTP_INVALID',
+        error: 'Please enter the verification code received on your mobile.',
+        code: 'INVALID_OTP_FORMAT',
+      };
+    }
+
+    let session: Stored2FactorSession | undefined;
+
+    if (effectiveSessionId) {
+      session = this.sessions.get(effectiveSessionId);
     } else {
       const sessionKey = `${normalizedPhone}:${purpose}`;
       const foundId = this.activeSessionByPhoneAndPurpose.get(sessionKey);
       if (foundId) {
-        session = this.otpSessions.get(foundId);
+        session = this.sessions.get(foundId);
       }
     }
 
     if (!session) {
       return {
         success: false,
+        status: 'SMS_OTP_VERIFICATION_REQUIRED',
         error: 'No active verification session found. Please request a new verification code.',
         code: 'SESSION_NOT_FOUND',
       };
     }
 
-    // Verify Purpose Match (Prevents cross-purpose token abuse)
-    if (session.purpose !== purpose) {
-      return {
-        success: false,
-        error: 'Invalid verification session purpose.',
-        code: 'PURPOSE_MISMATCH',
-      };
-    }
-
     // Check Expiration
-    if (Date.now() > session.expiresAt) {
+    if (Date.now() > session.expiresAt || session.status === 'EXPIRED') {
+      session.status = 'EXPIRED';
       this.activeSessionByPhoneAndPurpose.delete(`${normalizedPhone}:${purpose}`);
       return {
         success: false,
-        error: 'Verification code has expired. Please request a new code.',
+        status: 'OTP_EXPIRED',
+        error: 'Verification code expired. Please request a new code.',
         code: 'OTP_EXPIRED',
       };
     }
 
-    // Check Max Attempts (Brute Force Protection)
+    // Check Max Attempts
     if (session.attemptCount >= session.maxAttempts) {
-      this.otpSessions.delete(session.id);
+      session.status = 'FAILED';
+      this.sessions.delete(session.id);
       this.activeSessionByPhoneAndPurpose.delete(`${normalizedPhone}:${purpose}`);
       return {
         success: false,
+        status: 'OTP_LIMIT_REACHED',
         error: 'Too many incorrect attempts. For security, this verification code has been revoked. Please request a new code.',
         code: 'MAX_ATTEMPTS_EXCEEDED',
       };
     }
 
-    // Validate Code Hash
-    session.attemptCount += 1;
-    const computedHash = this.hashOtp(otpCode, normalizedPhone);
-
-    if (computedHash !== session.otpHash) {
-      const remaining = session.maxAttempts - session.attemptCount;
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       return {
         success: false,
-        error: `Incorrect verification code. ${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} remaining.`,
-        remainingAttempts: remaining,
+        status: 'SMS_PROVIDER_ERROR',
+        error: 'Mobile verification service is temporarily unavailable. Please try again.',
+        code: 'PROVIDER_NOT_CONFIGURED',
+      };
+    }
+
+    // Step G: Verify OTP with 2Factor.in API
+    try {
+      session.attemptCount += 1;
+
+      // Primary verification by provider session id, or fallback by phone number (VERIFY3)
+      let verifyUrl = session.providerSessionId
+        ? `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/VERIFY/${encodeURIComponent(session.providerSessionId)}/${encodeURIComponent(rawOtp)}`
+        : `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/VERIFY3/${encodeURIComponent(nationalNumber)}/${encodeURIComponent(rawOtp)}`;
+
+      const response = await fetch(verifyUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      const data: any = await response.json().catch(() => null);
+
+      if (data && data.Status === 'Success' && (data.Details === 'OTP Matched' || data.Details?.includes('Matched'))) {
+        // Successful verification!
+        console.log(`[2Factor.in] Mobile OTP verification successful for ${maskedPhone}`);
+
+        const now = Date.now();
+        session.status = 'VERIFIED';
+        session.verifiedAt = now;
+
+        // Issue 15-minute single-use verification token for transactional signup
+        const token = `tok_pv_${crypto.randomBytes(24).toString('hex')}`;
+        const tokenExpiresAt = now + 15 * 60 * 1000;
+        session.verificationToken = token;
+        session.tokenExpiresAt = tokenExpiresAt;
+
+        this.verifiedTokens.set(token, {
+          phone: normalizedPhone,
+          purpose,
+          expiresAt: tokenExpiresAt,
+        });
+
+        // Update PhoneVerification Record to VERIFIED
+        let verif = this.phoneVerifications.get(normalizedPhone);
+        if (!verif) {
+          verif = {
+            id: `pv_${Date.now().toString(36)}`,
+            phone,
+            normalizedPhone,
+            provider: '2FACTOR',
+            verificationStatus: 'VERIFIED',
+            riskLevel: 'LOW_RISK',
+            carrier: 'Reliance Jio / Airtel Partner',
+            lineType: 'MOBILE',
+            lineStatus: 'ACTIVE',
+            country: 'IN',
+            attemptCount: session.attemptCount,
+            verifiedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          verif.verificationStatus = 'VERIFIED';
+          verif.provider = '2FACTOR';
+          verif.verifiedAt = new Date().toISOString();
+          verif.updatedAt = new Date().toISOString();
+        }
+        this.phoneVerifications.set(normalizedPhone, verif);
+
+        // Clear active session to prevent replay attacks
+        this.activeSessionByPhoneAndPurpose.delete(`${normalizedPhone}:${purpose}`);
+
+        return {
+          success: true,
+          status: 'PHONE_VERIFIED',
+          verificationToken: token,
+          normalizedPhone,
+          phoneVerification: verif,
+        };
+      }
+
+      // Check Error Reason from 2Factor
+      const errorDetail = data?.Details || data?.Message || 'Verification failed';
+      console.warn(`[2Factor.in] Mobile OTP verification failed for ${maskedPhone}: ${errorDetail}`);
+
+      if (errorDetail === 'OTP Mismatch' || errorDetail?.toLowerCase().includes('mismatch')) {
+        const remaining = Math.max(0, session.maxAttempts - session.attemptCount);
+        return {
+          success: false,
+          status: 'OTP_INVALID',
+          error: remaining > 0
+            ? `Incorrect verification code. ${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} remaining.`
+            : 'Incorrect verification code. Maximum attempts exceeded.',
+          remainingAttempts: remaining,
+          code: 'INVALID_OTP',
+        };
+      }
+
+      if (errorDetail === 'OTP Expired' || errorDetail?.toLowerCase().includes('expired')) {
+        session.status = 'EXPIRED';
+        this.activeSessionByPhoneAndPurpose.delete(`${normalizedPhone}:${purpose}`);
+        return {
+          success: false,
+          status: 'OTP_EXPIRED',
+          error: 'Verification code expired. Please request a new code.',
+          code: 'OTP_EXPIRED',
+        };
+      }
+
+      return {
+        success: false,
+        status: 'OTP_INVALID',
+        error: 'Incorrect verification code.',
         code: 'INVALID_OTP',
       };
-    }
-
-    // OTP Verified Successfully!
-    const now = Date.now();
-    session.verifiedAt = now;
-
-    // Generate One-Time Verification Token valid for 15 minutes
-    const token = `tok_pv_${crypto.randomBytes(24).toString('hex')}`;
-    const tokenExpiresAt = now + 15 * 60 * 1000;
-    session.verificationToken = token;
-    session.tokenExpiresAt = tokenExpiresAt;
-
-    this.verifiedTokens.set(token, {
-      phone: normalizedPhone,
-      purpose,
-      expiresAt: tokenExpiresAt,
-    });
-
-    // Update PhoneVerification Record to VERIFIED
-    let verif = this.phoneVerifications.get(normalizedPhone);
-    if (!verif) {
-      verif = {
-        id: `pv_${Date.now().toString(36)}`,
-        phone,
-        normalizedPhone,
-        provider: 'SURPLUSX_SECURE_GATEWAY',
-        verificationStatus: 'VERIFIED',
-        riskLevel: 'LOW_RISK',
-        carrier: 'Reliance Jio / Airtel Partner',
-        lineType: 'MOBILE',
-        lineStatus: 'ACTIVE',
-        country: 'IN',
-        attemptCount: session.attemptCount,
-        verifiedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+    } catch (err: any) {
+      console.warn(`[2Factor.in] Network exception verifying OTP for ${maskedPhone}: ${err.message || err}`);
+      return {
+        success: false,
+        status: 'SMS_PROVIDER_ERROR',
+        error: 'Mobile verification service is temporarily unavailable. Please try again.',
+        code: 'NETWORK_ERROR',
       };
-    } else {
-      verif.verificationStatus = 'VERIFIED';
-      verif.verifiedAt = new Date().toISOString();
-      verif.updatedAt = new Date().toISOString();
     }
-    this.phoneVerifications.set(normalizedPhone, verif);
-
-    // Clean active session key to prevent replay
-    this.activeSessionByPhoneAndPurpose.delete(`${normalizedPhone}:${purpose}`);
-
-    return {
-      success: true,
-      verificationToken: token,
-      normalizedPhone,
-      phoneVerification: verif,
-    };
   }
 
   /**
-   * 7. Validate that a Phone Number has completed OTP Verification
-   * Called by `/api/auth/signup` and `/api/auth/phone/change` to ensure no one bypasses OTP
+   * 6. Resend OTP via 2Factor.in
+   */
+  public async resendOTP(params: {
+    phone: string;
+    purpose?: OTPPurpose;
+    clientIp: string;
+    deviceId?: string;
+  }) {
+    const norm = this.normalizePhone(params.phone);
+    if (norm.valid && norm.normalized) {
+      // Invalidate previous active session
+      const lookupKey = `${norm.normalized}:${params.purpose || 'SIGNUP'}`;
+      const prevId = this.activeSessionByPhoneAndPurpose.get(lookupKey);
+      if (prevId) {
+        const prevSession = this.sessions.get(prevId);
+        if (prevSession && Date.now() < prevSession.resendAvailableAt) {
+          const remainingSec = Math.ceil((prevSession.resendAvailableAt - Date.now()) / 1000);
+          return {
+            success: false,
+            status: 'RESEND_COOLDOWN_ACTIVE' as const,
+            error: `Please wait ${remainingSec} seconds before requesting a new verification code.`,
+            code: 'RESEND_COOLDOWN_ACTIVE',
+            resendAvailableInSeconds: remainingSec,
+          };
+        }
+        // Invalidate old session
+        this.sessions.delete(prevId);
+        this.activeSessionByPhoneAndPurpose.delete(lookupKey);
+      }
+    }
+
+    return this.sendOTP(params);
+  }
+
+  /**
+   * 7. Single-Use Consumption of Phone Verification Token
+   * Called during transactional user creation to guarantee the phone was verified via 2Factor OTP.
    */
   public consumeVerificationToken(
     token: string | undefined,
     expectedPhone: string,
-    expectedPurpose: OTPPurpose
+    expectedPurpose: OTPPurpose = 'SIGNUP'
   ): { valid: boolean; error?: string } {
     if (!token) {
       return {
@@ -737,7 +955,7 @@ export class PhoneVerificationService {
       };
     }
 
-    // Token is single-use: delete after successful consumption
+    // Single-use guarantee: delete after consumption
     this.verifiedTokens.delete(token);
     return { valid: true };
   }
@@ -829,7 +1047,7 @@ export class PhoneVerificationService {
       id: `pv_override_${Date.now().toString(36)}`,
       phone: params.phone,
       normalizedPhone: normalized,
-      provider: 'SURPLUSX_SECURE_GATEWAY',
+      provider: '2FACTOR',
       verificationStatus: 'VERIFIED',
       riskLevel: 'LOW_RISK',
       carrier: 'Manual Admin Verification',
@@ -858,17 +1076,16 @@ export class PhoneVerificationService {
   }
 
   /**
-   * Periodic cleanup job for expired OTP sessions and tokens (Specification #20, #21)
-   * Note: NEVER deletes actual user accounts.
+   * Periodic cleanup job for expired OTP sessions and tokens
    */
   public cleanupExpiredSessions(): { cleanedSessions: number; cleanedTokens: number } {
     const now = Date.now();
     let cleanedSessions = 0;
     let cleanedTokens = 0;
 
-    for (const [id, session] of this.otpSessions.entries()) {
-      if (new Date(session.expiresAt).getTime() < now) {
-        this.otpSessions.delete(id);
+    for (const [id, session] of this.sessions.entries()) {
+      if (session.expiresAt < now) {
+        this.sessions.delete(id);
         cleanedSessions++;
       }
     }

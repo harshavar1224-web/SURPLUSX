@@ -121,7 +121,6 @@ export const AuthModal: React.FC = () => {
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [phoneVerificationToken, setPhoneVerificationToken] = useState<string | null>(null);
   const [phoneResendCooldown, setPhoneResendCooldown] = useState(0);
-  const [demoOtpHint, setDemoOtpHint] = useState<string | null>(null);
   const [phoneVerificationError, setPhoneVerificationError] = useState<string | null>(null);
 
   // Real-time Identity Availability Check states
@@ -415,13 +414,9 @@ export const AuthModal: React.FC = () => {
         setPhoneVerificationError(res.error || 'Unable to send verification OTP.');
       } else {
         setPhoneOtpSent(true);
-        setPhoneOtpSessionId(res.sessionId || null);
+        setPhoneOtpSessionId(res.sessionId || res.verificationSessionId || null);
         setPhoneResendCooldown(res.resendAvailableInSeconds || 45);
-        setDemoOtpHint(res.demoOtpCode || null);
-        if (res.demoOtpCode) {
-          setPhoneOtpInput(res.demoOtpCode);
-        }
-        triggerToast(`Verification code sent to ${formatIndianPhoneDisplayClient(phoneRes.normalized)}`, 'info');
+        triggerToast(`Verification code sent via SMS to ${formatIndianPhoneDisplayClient(phoneRes.normalized)}`, 'info');
       }
     } catch (err: any) {
       setPhoneVerificationError(err.message || 'Network error while sending verification OTP.');
@@ -446,8 +441,10 @@ export const AuthModal: React.FC = () => {
     try {
       const res = await verifyPhoneOTPApi({
         sessionId: phoneOtpSessionId || undefined,
+        verificationSessionId: phoneOtpSessionId || undefined,
         phone: phoneRes.normalized,
         otpCode: phoneOtpInput.trim(),
+        otp: phoneOtpInput.trim(),
         purpose: 'SIGNUP',
       });
 
@@ -471,7 +468,6 @@ export const AuthModal: React.FC = () => {
     setPhoneOtpSent(false);
     setPhoneOtpInput('');
     setPhoneOtpSessionId(null);
-    setDemoOtpHint(null);
     setPhoneVerificationError(null);
   };
 
@@ -819,51 +815,6 @@ export const AuthModal: React.FC = () => {
                     placeholder="Enter account password"
                     className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-emerald-500 outline-hidden transition-all"
                   />
-                </div>
-              </div>
-
-              {/* Demo Accounts Quick Login Bar */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
-                <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                  <Fingerprint className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Demo Platform Identities (1-Click Fill)</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginIdentifier('priya@gmail.com');
-                      setLoginPassword('password123');
-                    }}
-                    className="p-1.5 text-left rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-[10px] cursor-pointer"
-                  >
-                    <div className="font-bold text-emerald-700">Consumer</div>
-                    <div className="text-slate-500 truncate">priya@gmail.com</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginIdentifier('owner@greenbasket.com');
-                      setLoginPassword('password123');
-                    }}
-                    className="p-1.5 text-left rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-[10px] cursor-pointer"
-                  >
-                    <div className="font-bold text-blue-700">Business</div>
-                    <div className="text-slate-500 truncate">owner@greenbasket.com</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginIdentifier('ops@hopefoundation.org');
-                      setLoginPassword('password123');
-                    }}
-                    className="p-1.5 text-left rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-[10px] cursor-pointer"
-                  >
-                    <div className="font-bold text-amber-700">NGO Partner</div>
-                    <div className="text-slate-500 truncate">ops@hopefoundation.org</div>
-                  </button>
                 </div>
               </div>
 
@@ -1378,11 +1329,11 @@ export const AuthModal: React.FC = () => {
 
                 {/* OTP Input Section (active when OTP is sent and not yet verified) */}
                 {phoneOtpSent && !phoneVerified && (
-                  <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-2xl space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
-                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        <span>Enter 6-Digit SMS Verification Code</span>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-950">
+                        <Smartphone className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span>Verification code sent to <strong className="font-mono text-emerald-800">{phoneIntelligence?.maskedPhone || (phoneInput ? `******${phoneInput.slice(-4)}` : '******')}</strong></span>
                       </div>
                       {phoneResendCooldown > 0 ? (
                         <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
@@ -1396,47 +1347,43 @@ export const AuthModal: React.FC = () => {
                           disabled={isSendingPhoneOtp}
                           className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
                         >
-                          Resend Code
+                          Resend SMS
                         </button>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={phoneOtpInput}
-                        onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        maxLength={6}
-                        placeholder="••••••"
-                        className="w-32 text-center font-mono font-bold tracking-widest text-sm px-3 py-2 rounded-xl border border-emerald-300 bg-white focus:border-emerald-600 outline-hidden shadow-2xs"
-                        autoFocus
-                      />
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={phoneOtpInput}
+                          onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          maxLength={6}
+                          placeholder="_ _ _ _ _ _"
+                          className="w-full sm:w-36 text-center font-mono font-bold tracking-[0.3em] text-base px-3 py-2 rounded-xl border border-emerald-300 bg-white focus:border-emerald-600 outline-hidden shadow-2xs placeholder:tracking-normal placeholder:font-sans placeholder:text-slate-400"
+                          autoFocus
+                        />
+                      </div>
 
                       <button
                         type="button"
                         onClick={handleVerifyPhoneOtp}
                         disabled={isVerifyingPhoneOtp || phoneOtpInput.length !== 6}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         {isVerifyingPhoneOtp ? (
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                         ) : (
                           <Check className="w-3.5 h-3.5" />
                         )}
-                        <span>Verify & Lock Mobile</span>
+                        <span>VERIFY MOBILE</span>
                       </button>
                     </div>
 
-                    {demoOtpHint && (
-                      <div className="p-2 bg-white/90 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 flex items-center justify-between">
-                        <span>
-                          ⚡ SMS OTP Code: <strong className="font-mono font-bold text-emerald-700">{demoOtpHint}</strong> (Simulated SMS)
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
-                          Valid 5 mins
-                        </span>
-                      </div>
-                    )}
+                    <div className="text-[11px] text-slate-500 flex items-center justify-between pt-0.5">
+                      <span>SMS OTP valid for 10 minutes via telecom SMS.</span>
+                      <span className="font-semibold text-emerald-700">Official SMS Gateway</span>
+                    </div>
                   </div>
                 )}
               </div>

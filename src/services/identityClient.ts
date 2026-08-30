@@ -285,12 +285,13 @@ export async function sendPhoneOTPApi(params: {
   deviceId?: string;
 }): Promise<{
   success: boolean;
+  status?: string;
   sessionId?: string;
+  verificationSessionId?: string;
   normalizedPhone?: string;
   expiresInSeconds?: number;
   resendAvailableInSeconds?: number;
   maskedPhone?: string;
-  demoOtpCode?: string;
   error?: string;
   code?: string;
 }> {
@@ -309,13 +310,47 @@ export async function sendPhoneOTPApi(params: {
   }
 }
 
+export async function resendPhoneOTPApi(params: {
+  phone: string;
+  purpose?: OTPPurpose;
+  deviceId?: string;
+}): Promise<{
+  success: boolean;
+  status?: string;
+  sessionId?: string;
+  verificationSessionId?: string;
+  normalizedPhone?: string;
+  expiresInSeconds?: number;
+  resendAvailableInSeconds?: number;
+  maskedPhone?: string;
+  error?: string;
+  code?: string;
+}> {
+  try {
+    const res = await fetch('/api/auth/phone/resend-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Network error while resending verification OTP.',
+    };
+  }
+}
+
 export async function verifyPhoneOTPApi(params: {
   sessionId?: string;
+  verificationSessionId?: string;
   phone: string;
-  otpCode: string;
+  otpCode?: string;
+  otp?: string;
   purpose?: OTPPurpose;
 }): Promise<{
   success: boolean;
+  status?: string;
   verificationToken?: string;
   normalizedPhone?: string;
   phoneVerification?: PhoneVerification;
@@ -347,7 +382,6 @@ export async function requestPhoneChangeApi(params: {
   sessionId?: string;
   normalizedPhone?: string;
   maskedPhone?: string;
-  demoOtpCode?: string;
   error?: string;
   code?: string;
 }> {
