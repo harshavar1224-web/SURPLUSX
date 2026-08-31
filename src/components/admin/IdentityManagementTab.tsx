@@ -18,6 +18,7 @@ import {
   UserCheck,
   History,
   X,
+  Trash2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { User, UserRole, AdminRoleChangeLog } from '../../types';
@@ -44,6 +45,39 @@ export const IdentityManagementTab: React.FC = () => {
   const [adminAuthConsent, setAdminAuthConsent] = useState(false);
   const [isSubmittingRoleChange, setIsSubmittingRoleChange] = useState(false);
   const [modalError, setModalError] = useState('');
+
+  // Delete User Modal state
+  const [selectedUserForDeletion, setSelectedUserForDeletion] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [deleteModalError, setDeleteModalError] = useState('');
+
+  const handleDeleteUser = async () => {
+    if (!selectedUserForDeletion) return;
+    setDeleteModalError('');
+    setIsDeletingUser(true);
+    try {
+      const res = await fetch(`/api/admin/users/${selectedUserForDeletion.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-id': currentUser?.id || '',
+        },
+        body: JSON.stringify({ adminId: currentUser?.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        triggerToast(`Permanently deleted user ${selectedUserForDeletion.name}.`, 'success');
+        setSelectedUserForDeletion(null);
+        await fetchRegisteredUsers();
+      } else {
+        setDeleteModalError(data.error || 'Failed to delete user.');
+      }
+    } catch (err: any) {
+      setDeleteModalError(err.message || 'Network error deleting user.');
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -342,13 +376,22 @@ export const IdentityManagementTab: React.FC = () => {
                           Protected Admin
                         </span>
                       ) : (
-                        <button
-                          onClick={() => openRoleChangeModal(user)}
-                          className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50 text-slate-700 hover:text-amber-900 text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Authorized Change</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openRoleChangeModal(user)}
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50 text-slate-700 hover:text-amber-900 text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Role</span>
+                          </button>
+                          <button
+                            onClick={() => setSelectedUserForDeletion(user)}
+                            className="px-3 py-1.5 rounded-xl border border-rose-200 hover:border-rose-400 hover:bg-rose-50 text-rose-700 hover:text-rose-900 text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -558,6 +601,68 @@ export const IdentityManagementTab: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {selectedUserForDeletion && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <ShieldAlert className="w-6 h-6" />
+                <h3 className="text-base font-extrabold">Permanent User Deletion</h3>
+              </div>
+              <button
+                onClick={() => setSelectedUserForDeletion(null)}
+                className="p-1.5 rounded-full text-rose-100 hover:text-white hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              {deleteModalError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+                  <span>{deleteModalError}</span>
+                </div>
+              )}
+
+              <p className="text-slate-700 leading-relaxed font-medium">
+                Are you sure you want to permanently delete this user? This action will remove their account, sessions, and associated personal records in accordance with SurplusX data retention policies.
+              </p>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1.5">
+                <div className="font-extrabold text-slate-900 text-sm">{selectedUserForDeletion.name}</div>
+                <div className="text-slate-600 font-mono text-[11px]">{selectedUserForDeletion.email}</div>
+                <div className="text-slate-600 font-mono text-[11px]">{selectedUserForDeletion.phone}</div>
+                <div className="pt-1">
+                  <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 font-extrabold text-[10px]">
+                    Role: {selectedUserForDeletion.role}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserForDeletion(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingUser}
+                  onClick={handleDeleteUser}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold shadow-md shadow-rose-600/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingUser ? 'Deleting User...' : 'Delete Permanently'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

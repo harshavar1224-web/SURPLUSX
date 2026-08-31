@@ -1064,7 +1064,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // Default view routing based on role
-    setActiveView('dashboard');
+    setActiveView(user.role === 'ADMIN' ? 'admin' : 'dashboard');
   };
 
   // Authoritative Login (SERVER DETERMINES ROLE - NO ROLE SELECTOR ON LOGIN)

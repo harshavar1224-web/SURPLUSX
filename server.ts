@@ -25,7 +25,7 @@ import { UserRole, LocationRadiusPolicyType, LocalityType, DeliveryTracking, Del
 dotenv.config();
 
 // In-memory store of active surplus listings on backend
-let serverListings = [...INITIAL_LISTINGS];
+let serverListings: any[] = [];
 
 // ============================================================================
 // MAPPLS OAUTH 2.0 TOKEN MANAGER & CREDENTIAL SECURITY
@@ -96,102 +96,7 @@ function broadcastDeliveryUpdate(delivery: DeliveryTracking) {
   }
 }
 
-let serverDeliveries: DeliveryTracking[] = [
-  {
-    id: 'del-901',
-    orderOrDonationId: 'ord-1',
-    orderId: 'ord-1',
-    ngoId: 'ngo-1',
-    ngoName: 'Hope Foundation Food Rescue',
-    type: 'CONSUMER_ORDER',
-    driverId: 'usr-rider-1',
-    driverName: 'Rahul Verma',
-    driverPhone: '+91 98765 43210',
-    volunteerName: 'Rahul Verma',
-    vehicleType: 'E-Bike',
-    origin: {
-      name: 'Fresh Harvest Grocers (Depot)',
-      address: 'Shop 14, Commercial Complex, Sector 18, Noida, Uttar Pradesh 201301',
-      lat: 28.5708,
-      lng: 77.3261,
-    },
-    destination: {
-      name: 'Consumer Delivery Location',
-      address: 'Tower B, Galaxy Apartments, Sector 62, Noida, Uttar Pradesh 201309',
-      lat: 28.6280,
-      lng: 77.3649,
-    },
-    currentLocation: {
-      lat: 28.5850,
-      lng: 77.3380,
-      speed: 22,
-      heading: 45,
-      accuracy: 6,
-      lastUpdated: new Date().toISOString(),
-    },
-    pickupLatitude: 28.5708,
-    pickupLongitude: 77.3261,
-    pickupAddress: 'Shop 14, Commercial Complex, Sector 18, Noida, Uttar Pradesh 201301',
-    dropoffLatitude: 28.6280,
-    dropoffLongitude: 77.3649,
-    dropoffAddress: 'Tower B, Galaxy Apartments, Sector 62, Noida, Uttar Pradesh 201309',
-    currentLatitude: 28.5850,
-    currentLongitude: 77.3380,
-    currentAccuracy: 6,
-    currentSpeed: 22,
-    currentHeading: 45,
-    currentAddress: 'Sector 19 Road, Noida, Uttar Pradesh',
-    lastLocationAt: new Date().toISOString(),
-    etaMinutes: 12,
-    distanceKm: 4.8,
-    distanceRemainingKm: 4.8,
-    totalDistanceTravelledKm: 1.2,
-    status: 'EN_ROUTE_TO_DROP',
-    pickupOtp: '8492',
-    dropOtp: '4190',
-    pickupCode: '8492',
-    deliveryOtp: '4190',
-    routeGeometry: [],
-    travelledTrail: [
-      [28.5708, 77.3261],
-      [28.5780, 77.3310],
-      [28.5850, 77.3380],
-    ],
-    connectionStatus: 'LIVE',
-    lowAccuracyFlag: false,
-    isRealGpsActive: true,
-    pickupGeofenceRadiusMeters: 200,
-    dropGeofenceRadiusMeters: 200,
-    isWithinPickupGeofence: false,
-    isWithinDropGeofence: false,
-    distanceToPickupMeters: 1800,
-    distanceToDropMeters: 4800,
-    queuedOfflineLocationsCount: 0,
-    networkStatus: 'ONLINE',
-    driverStatus: 'MOVING',
-    locationHistory: [],
-    events: [
-      {
-        id: 'evt-1',
-        deliveryId: 'del-901',
-        eventType: 'ASSIGNED',
-        actorId: 'system',
-        latitude: 28.5708,
-        longitude: 77.3261,
-        timestamp: new Date(Date.now() - 600000).toISOString(),
-      },
-      {
-        id: 'evt-2',
-        deliveryId: 'del-901',
-        eventType: 'PICKUP_VERIFIED',
-        actorId: 'usr-rider-1',
-        latitude: 28.5708,
-        longitude: 77.3261,
-        timestamp: new Date(Date.now() - 300000).toISOString(),
-      },
-    ],
-  },
-];
+let serverDeliveries: DeliveryTracking[] = [];
 
 async function startServer() {
   const app = express();
@@ -1619,12 +1524,15 @@ async function startServer() {
     const { identifier, password, deviceId } = req.body;
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
 
+    console.log(`[AuthDiagnostic] Login attempt for identifier: ${identifier || 'none'} from IP: ${clientIp}`);
     const result = serverAccountService.authenticateUser(identifier, password, deviceId, clientIp);
 
     if (!result.success) {
+      console.log(`[AuthDiagnostic] Login failed for identifier: ${identifier} - Error: ${result.error}`);
       return res.status(401).json(result);
     }
 
+    console.log(`[AuthDiagnostic] Login SUCCESS for user: ${result.user?.email}, Role: ${result.user?.role}`);
     res.json(result);
   });
 
@@ -1739,6 +1647,33 @@ async function startServer() {
     res.json(result);
   });
 
+  // POST /api/admin/reset-data - Secure platform data reset (Admin only)
+  app.post('/api/admin/reset-data', (req, res) => {
+    const { adminId, confirmationKey } = req.body;
+    if (confirmationKey !== 'CONFIRM_SURPLUSX_DATA_RESET') {
+      return res.status(400).json({ success: false, error: 'Invalid reset confirmation key.' });
+    }
+
+    const admin = serverAccountService.findUserById(adminId);
+    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'SUPER_ADMIN')) {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    try {
+      const resetRes = serverAccountService.resetToAdminOnly();
+      serverListings = [];
+      serverDeliveries = [];
+
+      res.json({
+        success: true,
+        message: 'Platform data reset successfully. All non-admin data cleared, admin preserved.',
+        ...resetRes,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Reset failed' });
+    }
+  });
+
   // 23. GET /api/admin/phone-blocks - List Blocked Mobile Numbers
   app.get('/api/admin/phone-blocks', (req, res) => {
     const blocked = phoneVerificationService.getBlockedNumbers();
@@ -1806,6 +1741,60 @@ async function startServer() {
       count: users.length,
       users,
     });
+  });
+
+  // DELETE /api/admin/users/:id - Delete a user (Admin only)
+  app.delete('/api/admin/users/:id', (req, res) => {
+    const { id: targetUserId } = req.params;
+    const adminId = (req.headers['x-admin-id'] as string) || req.body.adminId || '';
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const result = serverAccountService.deleteUser({
+      adminId,
+      targetUserId,
+      ipAddress: clientIp,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
+  });
+
+  // GET /api/admin/administrators - List administrators (Super Admin only)
+  app.get('/api/admin/administrators', (req, res) => {
+    const adminId = (req.headers['x-admin-id'] as string) || req.query.adminId || '';
+    const admin = serverAccountService.findUserById(adminId as string);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Super Admin privileges required.' });
+    }
+    const administrators = serverAccountService.getAdministrators();
+    res.json({ success: true, count: administrators.length, administrators });
+  });
+
+  // DELETE /api/admin/administrators/:id - Delete an administrator (Super Admin only)
+  app.delete('/api/admin/administrators/:id', (req, res) => {
+    const { id: targetAdminId } = req.params;
+    const adminId = (req.headers['x-admin-id'] as string) || req.body.adminId || '';
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const admin = serverAccountService.findUserById(adminId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Super Admin privileges required.' });
+    }
+
+    const result = serverAccountService.deleteUser({
+      adminId,
+      targetUserId: targetAdminId,
+      ipAddress: clientIp,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json(result);
   });
 
   // 28. GET /api/admin/identity-audit-logs - Identity & Role Audit Logs

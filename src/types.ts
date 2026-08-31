@@ -1,4 +1,4 @@
-export type UserRole = 'CONSUMER' | 'BUSINESS' | 'NGO' | 'RETAILER' | 'RIDER' | 'ADMIN';
+export type UserRole = 'CONSUMER' | 'BUSINESS' | 'NGO' | 'RETAILER' | 'RIDER' | 'ADMIN' | 'SUPER_ADMIN';
 
 export type LocalityType = 'VILLAGE' | 'TOWN' | 'CITY' | 'METRO';
 

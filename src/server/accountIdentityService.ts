@@ -164,68 +164,6 @@ class AccountIdentityDatabase {
   private seedInitialAccounts() {
     const defaultAccounts: StoredAccount[] = [
       {
-        id: 'user-consumer-1',
-        name: 'Harsha Vardhan',
-        email: 'harsha@surplusx.org',
-        phone: '+919886077123',
-        role: 'CONSUMER',
-        city: 'Bangalore, India',
-        isVerified: true,
-        joinedDate: 'August 2024',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-        emailVerified: true,
-        phoneVerified: true,
-        roleLocked: true,
-        deviceBindingId: 'dev-consumer-harsha-01',
-        passwordHash: 'surplusx_pwd_hash_consumer',
-        loginAttempts: 0,
-        isBlocked: false,
-        createdAt: '2024-08-01T10:00:00.000Z',
-        updatedAt: '2024-08-01T10:00:00.000Z',
-      },
-      {
-        id: 'user-business-1',
-        name: 'Green Basket Foods',
-        email: 'owner@greenbasket.com',
-        phone: '+919845067890',
-        role: 'BUSINESS',
-        organizationName: 'Green Basket Organics Pvt Ltd',
-        city: 'Bangalore, India',
-        isVerified: true,
-        joinedDate: 'March 2024',
-        avatarUrl: 'https://images.unsplash.com/photo-1556740738-b6a63e27c4df?auto=format&fit=crop&w=200&q=80',
-        emailVerified: true,
-        phoneVerified: true,
-        roleLocked: true,
-        deviceBindingId: 'dev-business-store-01',
-        passwordHash: 'surplusx_pwd_hash_business',
-        loginAttempts: 0,
-        isBlocked: false,
-        createdAt: '2024-03-15T08:30:00.000Z',
-        updatedAt: '2024-03-15T08:30:00.000Z',
-      },
-      {
-        id: 'user-ngo-1',
-        name: 'Hope Foundation Team',
-        email: 'ops@hopefoundation.org',
-        phone: '+919845012345',
-        role: 'NGO',
-        organizationName: 'Hope Foundation Bangalore',
-        city: 'Bangalore, India',
-        isVerified: true,
-        joinedDate: 'January 2024',
-        avatarUrl: 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=200&q=80',
-        emailVerified: true,
-        phoneVerified: true,
-        roleLocked: true,
-        deviceBindingId: 'dev-ngo-hq-01',
-        passwordHash: 'surplusx_pwd_hash_ngo',
-        loginAttempts: 0,
-        isBlocked: false,
-        createdAt: '2024-01-10T11:00:00.000Z',
-        updatedAt: '2024-01-10T11:00:00.000Z',
-      },
-      {
         id: 'user-admin-1',
         name: 'SurplusX Operations Lead',
         email: 'admin@surplusx.org',
@@ -246,53 +184,11 @@ class AccountIdentityDatabase {
         updatedAt: '2023-12-01T09:00:00.000Z',
       },
       {
-        id: 'user-retailer-1',
-        name: 'Metro Mart Supermarkets',
-        email: 'procurement@metromart.in',
-        phone: '+919900144556',
-        role: 'RETAILER',
-        organizationName: 'Metro Mart Retail Chain Pvt Ltd',
-        city: 'Bangalore, India',
-        isVerified: true,
-        joinedDate: 'February 2024',
-        avatarUrl: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&w=200&q=80',
-        emailVerified: true,
-        phoneVerified: true,
-        roleLocked: true,
-        deviceBindingId: 'dev-retailer-mart-01',
-        passwordHash: 'surplusx_pwd_hash_retailer',
-        loginAttempts: 0,
-        isBlocked: false,
-        createdAt: '2024-02-12T14:00:00.000Z',
-        updatedAt: '2024-02-12T14:00:00.000Z',
-      },
-      {
-        id: 'user-rider-1',
-        name: 'Rahul Deshmukh',
-        email: 'rahul.rider@surplusx.org',
-        phone: '+919741288401',
-        role: 'RIDER',
-        organizationName: 'Ather Fleet Logistics Partner',
-        city: 'Bangalore, India',
-        isVerified: true,
-        joinedDate: 'April 2024',
-        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
-        emailVerified: true,
-        phoneVerified: true,
-        roleLocked: true,
-        deviceBindingId: 'dev-rider-rahul-01',
-        passwordHash: 'surplusx_pwd_hash_rider',
-        loginAttempts: 0,
-        isBlocked: false,
-        createdAt: '2024-04-05T07:45:00.000Z',
-        updatedAt: '2024-04-05T07:45:00.000Z',
-      },
-      {
-        id: 'user-owner-admin-primary',
-        name: 'SurplusX Platform Owner',
-        email: 'surplusx.support@gmail.com',
+        id: 'user-super-admin-primary',
+        name: 'SurplusX Platform Super Admin',
+        email: 'surplus.support@gmail.com',
         phone: '+919876543210',
-        role: 'ADMIN',
+        role: 'SUPER_ADMIN',
         city: 'Bangalore HQ',
         isVerified: true,
         joinedDate: 'January 2026',
@@ -300,7 +196,7 @@ class AccountIdentityDatabase {
         emailVerified: true,
         phoneVerified: true,
         roleLocked: true,
-        deviceBindingId: 'dev-owner-admin-01',
+        deviceBindingId: 'dev-super-admin-01',
         passwordHash: bcrypt.hashSync('surplusai@1224', 12),
         loginAttempts: 0,
         isBlocked: false,
@@ -316,6 +212,10 @@ class AccountIdentityDatabase {
 
       this.usersById.set(acc.id, acc);
       this.emailToUserId.set(normEmail, acc.id);
+      if (acc.role === 'ADMIN') {
+        this.emailToUserId.set('surplusx.support@gmail.com', acc.id);
+        this.emailToUserId.set('surplus.support@gmail.com', acc.id);
+      }
       this.phoneToUserId.set(normPhone, acc.id);
 
       this.auditLogs.push({
@@ -1487,6 +1387,129 @@ class AccountIdentityDatabase {
     return {
       success: true,
       user: safeUser,
+    };
+  }
+
+  public getAdministrators(): User[] {
+    const admins: User[] = [];
+    for (const acc of this.usersById.values()) {
+      if (acc.role === 'ADMIN' || acc.role === 'SUPER_ADMIN') {
+        const { passwordHash, ...safe } = acc;
+        admins.push(safe);
+      }
+    }
+    return admins;
+  }
+
+  public resetToAdminOnly(): { success: boolean; deletedCount: number; preservedAdminCount: number } {
+    const adminAccounts: StoredAccount[] = [];
+    for (const [id, acc] of this.usersById.entries()) {
+      if (acc.role === 'ADMIN' || acc.role === 'SUPER_ADMIN') {
+        adminAccounts.push(acc);
+      }
+    }
+
+    if (adminAccounts.length === 0) {
+      throw new Error('Safety Abort: Cannot reset because no ADMIN or SUPER_ADMIN account exists.');
+    }
+
+    const deletedCount = this.usersById.size - adminAccounts.length;
+
+    this.usersById.clear();
+    this.emailToUserId.clear();
+    this.phoneToUserId.clear();
+
+    for (const admin of adminAccounts) {
+      this.usersById.set(admin.id, admin);
+      const normEmail = normalizeEmail(admin.email);
+      this.emailToUserId.set(normEmail, admin.id);
+      if (admin.email === 'surplus.support@gmail.com' || admin.email === 'surplusx.support@gmail.com') {
+        this.emailToUserId.set('surplus.support@gmail.com', admin.id);
+        this.emailToUserId.set('surplusx.support@gmail.com', admin.id);
+      }
+      const phoneRes = normalizeIndianPhone(admin.phone);
+      if (phoneRes.valid) {
+        this.phoneToUserId.set(phoneRes.normalized, admin.id);
+      } else {
+        this.phoneToUserId.set(admin.phone, admin.id);
+      }
+    }
+
+    this.auditLogs = [
+      {
+        id: `audit-reset-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        userId: adminAccounts[0].id,
+        userRole: adminAccounts[0].role,
+        action: 'SECURE_DATA_RESET',
+        category: 'SYSTEM',
+        details: `Secure platform data reset executed. Deleted ${deletedCount} non-admin accounts. Preserved ${adminAccounts.length} ADMIN / SUPER_ADMIN accounts.`,
+        ipAddress: '127.0.0.1',
+        deviceId: 'admin-reset-script',
+        integrityHash: `hash-reset-${Date.now()}`,
+      },
+    ];
+
+    return {
+      success: true,
+      deletedCount,
+      preservedAdminCount: adminAccounts.length,
+    };
+  }
+
+  public deleteUser(params: { adminId: string; targetUserId: string; ipAddress?: string }): { success: boolean; error?: string; deletedUser?: { id: string; name: string; email: string; role: string } } {
+    const admin = this.usersById.get(params.adminId);
+    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'SUPER_ADMIN')) {
+      return { success: false, error: 'Unauthorized: Admin privileges required.' };
+    }
+
+    const targetUser = this.usersById.get(params.targetUserId);
+    if (!targetUser) {
+      return { success: false, error: 'User not found.' };
+    }
+
+    if (params.adminId === params.targetUserId) {
+      return { success: false, error: 'You cannot delete the currently authenticated account.' };
+    }
+
+    if (targetUser.role === 'SUPER_ADMIN') {
+      return { success: false, error: 'You cannot delete a Super Admin account.' };
+    }
+
+    if (targetUser.role === 'ADMIN') {
+      if (admin.role !== 'SUPER_ADMIN') {
+        return { success: false, error: 'Administrators cannot delete other administrators. Only Super Admin can manage administrators.' };
+      }
+    }
+
+    this.usersById.delete(targetUser.id);
+    const normEmail = normalizeEmail(targetUser.email);
+    if (this.emailToUserId.get(normEmail) === targetUser.id) {
+      this.emailToUserId.delete(normEmail);
+    }
+    const phoneRes = normalizeIndianPhone(targetUser.phone);
+    const phoneKey = phoneRes.valid ? phoneRes.normalized : targetUser.phone;
+    if (this.phoneToUserId.get(phoneKey) === targetUser.id) {
+      this.phoneToUserId.delete(phoneKey);
+    }
+
+    this.recordAuditLog(
+      admin.id,
+      admin.role,
+      targetUser.role === 'ADMIN' ? 'ADMIN_DELETED' : 'USER_DELETED',
+      `Permanently deleted ${targetUser.role} user ${targetUser.name} (${targetUser.email})`,
+      params.ipAddress || '127.0.0.1',
+      'admin-dashboard'
+    );
+
+    return {
+      success: true,
+      deletedUser: {
+        id: targetUser.id,
+        name: targetUser.name,
+        email: targetUser.email,
+        role: targetUser.role,
+      },
     };
   }
 }
