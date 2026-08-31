@@ -27,7 +27,6 @@ import { HelpSupportView } from './components/common/HelpSupportView';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthRequired } from './components/auth/AuthRequired';
 import { AccessDenied } from './components/auth/AccessDenied';
-import { AdminLoginPage } from './components/admin/AdminLoginPage';
 import { LocationSelectModal } from './components/location/LocationSelectModal';
 import { SurplusXLogo } from './components/SurplusXLogo';
 import { Leaf, Menu } from 'lucide-react';
@@ -42,24 +41,6 @@ const MainContent: React.FC = () => {
     previewRole,
     setAdminPreviewRole,
   } = useApp();
-
-  // 0. Render Admin Login View
-  if (activeView === 'admin/login') {
-    return (
-      <div className="min-h-screen bg-slate-50/70 text-slate-900 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
-        <Navbar />
-        <main className="flex-1">
-          <AdminLoginPage />
-        </main>
-        {/* Global Modals */}
-        <AuthModal />
-        <LocationSelectModal />
-        <ListingDetailModal />
-        <CartAndCheckoutModal />
-        <ReceiptModal />
-      </div>
-    );
-  }
 
   // 1. Render Public Landing View (No Sidebar)
   if (

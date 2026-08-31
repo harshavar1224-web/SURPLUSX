@@ -939,7 +939,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       'business-profile',
       'contact',
       'help',
-      'admin/login',
     ];
     if (publicViews.includes(view)) return true;
 
