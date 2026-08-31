@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CategoryType, SurplusListing } from '../../types';
+import { LocationGate } from '../location/LocationGate';
 
 export const BrowseListings: React.FC = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -42,10 +43,15 @@ export const BrowseListings: React.FC = () => {
     appliedDiscoveryRadius,
     appliedLocalityType,
     userLocation,
+    locationPermission,
     includeWiderMarketplace,
     setIncludeWiderMarketplace,
     verifyDistanceEligibility,
   } = useApp();
+
+  if (!userLocation || locationPermission !== 'GRANTED') {
+    return <LocationGate />;
+  }
 
   const categories: ('All' | CategoryType)[] = [
     'All',

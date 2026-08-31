@@ -27,6 +27,7 @@ import { HelpSupportView } from './components/common/HelpSupportView';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthRequired } from './components/auth/AuthRequired';
 import { AccessDenied } from './components/auth/AccessDenied';
+import { AdminLoginPage } from './components/admin/AdminLoginPage';
 import { LocationSelectModal } from './components/location/LocationSelectModal';
 import { SurplusXLogo } from './components/SurplusXLogo';
 import { Leaf, Menu } from 'lucide-react';
@@ -38,7 +39,27 @@ const MainContent: React.FC = () => {
     canAccessView,
     isSidebarCollapsed,
     setIsMobileSidebarOpen,
+    previewRole,
+    setAdminPreviewRole,
   } = useApp();
+
+  // 0. Render Admin Login View
+  if (activeView === 'admin/login') {
+    return (
+      <div className="min-h-screen bg-slate-50/70 text-slate-900 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+        <Navbar />
+        <main className="flex-1">
+          <AdminLoginPage />
+        </main>
+        {/* Global Modals */}
+        <AuthModal />
+        <LocationSelectModal />
+        <ListingDetailModal />
+        <CartAndCheckoutModal />
+        <ReceiptModal />
+      </div>
+    );
+  }
 
   // 1. Render Public Landing View (No Sidebar)
   if (
@@ -116,6 +137,39 @@ const MainContent: React.FC = () => {
 
     // Role Specific Views
     if (currentUser.role === 'ADMIN') {
+      if (previewRole) {
+        const renderPreviewComponent = () => {
+          if (previewRole === 'CONSUMER') {
+            if (activeView === 'orders') return <MyOrdersView />;
+            if (activeView === 'receipts') return <ReceiptsView />;
+            if (activeView === 'saved') return <SavedListingsView />;
+            return <ConsumerDashboard />;
+          }
+          if (previewRole === 'BUSINESS') return <BusinessDashboard />;
+          if (previewRole === 'NGO') return <NgoDashboard />;
+          return <AdminDashboard />;
+        };
+
+        return (
+          <div className="space-y-4 w-full">
+            <div className="bg-amber-500 text-slate-950 px-4 py-2.5 rounded-2xl shadow-md flex items-center justify-between font-medium text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span>
+                <span>
+                  <strong>ADMIN PREVIEW MODE:</strong> Viewing interface as <strong>{previewRole}</strong>. Actual database role remains <strong>ADMIN</strong>.
+                </span>
+              </div>
+              <button
+                onClick={() => setAdminPreviewRole(null)}
+                className="px-3 py-1 bg-slate-950 text-white font-bold rounded-xl hover:bg-slate-900 transition-all cursor-pointer text-xs"
+              >
+                Exit Preview & Return to Admin
+              </button>
+            </div>
+            {renderPreviewComponent()}
+          </div>
+        );
+      }
       return <AdminDashboard />;
     }
 

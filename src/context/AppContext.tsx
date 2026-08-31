@@ -98,6 +98,8 @@ interface AppContextType {
   fetchRegisteredUsers: () => Promise<User[]>;
   roleAuditLogs: AdminRoleChangeLog[];
   fetchIdentityAuditLogs: () => Promise<void>;
+  previewRole: UserRole | null;
+  setAdminPreviewRole: (role: UserRole | null) => void;
   requireAuth: (intent?: PendingActionIntent) => boolean;
   canAccessView: (view: string) => boolean;
   pendingIntent: PendingActionIntent | null;
@@ -108,10 +110,11 @@ interface AppContextType {
   setSelectedCity: (city: string) => void;
 
   // Authoritative Geo-Radius & Location Engine
-  userLocation: UserLocation;
+  userLocation: UserLocation | null;
   locationPermission: LocationPermissionStatus;
   isRequestingLocation: boolean;
   requestLiveLocation: () => Promise<boolean>;
+  refreshLocation: () => Promise<boolean>;
   setUserManualLocation: (lat: number, lng: number, localityName: string) => Promise<void>;
   appliedDiscoveryRadius: number;
   appliedLocalityType: LocalityType;
@@ -338,33 +341,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
+
+  const setAdminPreviewRole = (role: UserRole | null) => {
+    if (!currentUser || currentUser.role !== 'ADMIN') return;
+    setPreviewRole(role);
+    if (role) {
+      addAuditLog(`ADMIN_VIEW_AS_${role}`, 'AUTH', `Admin ${currentUser.email} initiated View As preview for role: ${role}`);
+      triggerToast(`Admin Preview Mode: Viewing interface as ${role}`, 'info');
+    } else {
+      addAuditLog('ADMIN_EXIT_VIEW_AS', 'AUTH', `Admin ${currentUser.email} exited View As preview mode.`);
+      triggerToast('Exited Admin Preview Mode. Returned to Admin Command Center.', 'success');
+      setActiveView('admin');
+    }
+  };
+
   const [activeView, setActiveView] = useState<string>('landing');
   const [pendingIntent, setPendingIntent] = useState<PendingActionIntent | null>(null);
   const [selectedCity, setSelectedCity] = useState<string>('Bangalore, India');
   const isAuthenticated = currentUser !== null;
 
   // Authoritative Geo-Radius & Location Engine State
-  const [userLocation, setUserLocation] = useState<UserLocation>({
-    id: 'loc-init',
-    latitude: 17.4483,
-    longitude: 78.3915,
-    accuracy: 15,
-    formattedAddress: 'Main Road, Madhapur, Hyderabad, Telangana 500081, India',
-    area: 'Madhapur',
-    city: 'Hyderabad',
-    district: 'Hyderabad',
-    state: 'Telangana',
-    postalCode: '500081',
-    country: 'India',
-    countryCode: 'in',
-    source: 'GPS',
-    localityType: 'METRO',
-    localityName: 'Madhapur Tech Hub',
-    updatedAt: new Date().toISOString(),
-    isLiveGps: true,
-  });
-
-  const [locationPermission, setLocationPermission] = useState<LocationPermissionStatus>('GRANTED');
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [locationPermission, setLocationPermission] = useState<LocationPermissionStatus>('REQUESTING');
   const [isRequestingLocation, setIsRequestingLocation] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [includeWiderMarketplace, setIncludeWiderMarketplace] = useState(false);
@@ -385,20 +384,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     },
   ]);
 
+  // Request real device GPS on initial app mount
+  useEffect(() => {
+    requestLiveLocation();
+  }, []);
+
+  const refreshLocation = async (): Promise<boolean> => {
+    setUserLocation(null);
+    setLocationPermission('REQUESTING');
+    return await requestLiveLocation();
+  };
+
   // Derive active platform discovery policy for user's locality
-  const activeDiscoveryPolicy =
+  const activeDiscoveryPolicy = userLocation ? (
     radiusPolicies.find(
       (p) => p.policyType === 'DISCOVERY_RADIUS' && p.localityType === userLocation.localityType
     ) ||
     radiusPolicies.find((p) => p.policyType === 'DISCOVERY_RADIUS' && p.localityType === 'CITY') ||
-    DEFAULT_RADIUS_POLICIES[0];
+    DEFAULT_RADIUS_POLICIES[0]
+  ) : DEFAULT_RADIUS_POLICIES[0];
 
   const appliedDiscoveryRadius =
-    activeDiscoveryPolicy?.radiusKm || (userLocation.localityType === 'VILLAGE' ? 20 : 40);
-  const appliedLocalityType = userLocation.localityType;
+    activeDiscoveryPolicy?.radiusKm || (userLocation?.localityType === 'VILLAGE' ? 20 : 40);
+  const appliedLocalityType = userLocation?.localityType || 'CITY';
 
-  const isLowAccuracyWarning = userLocation.isLiveGps && userLocation.accuracy > 3000;
-  const locationAccuracyMeters = userLocation.accuracy;
+  const isLowAccuracyWarning = userLocation ? (userLocation.isLiveGps && userLocation.accuracy > 3000) : false;
+  const locationAccuracyMeters = userLocation?.accuracy || 0;
 
   // Listings and Filters
   const [listings, setListings] = useState<SurplusListing[]>(() => {
@@ -928,6 +939,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       'business-profile',
       'contact',
       'help',
+      'admin/login',
     ];
     if (publicViews.includes(view)) return true;
 
@@ -2316,6 +2328,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         currentUser,
         setCurrentUser,
+        previewRole,
+        setAdminPreviewRole,
         isAuthenticated,
         switchRole,
         login,
@@ -2339,6 +2353,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         locationPermission,
         isRequestingLocation,
         requestLiveLocation,
+        refreshLocation,
         setUserManualLocation,
         appliedDiscoveryRadius,
         appliedLocalityType,

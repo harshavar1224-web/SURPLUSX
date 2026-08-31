@@ -19,6 +19,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { SurplusListing, CategoryType } from '../../types';
 import { LocationCard } from '../location/LocationCard';
+import { LocationGate } from '../location/LocationGate';
 import { mapplsClient } from '../../services/mapplsClient';
 
 export const InteractiveMapView: React.FC = () => {
@@ -29,12 +30,17 @@ export const InteractiveMapView: React.FC = () => {
     selectedCategory,
     setSelectedCategory,
     userLocation,
+    locationPermission,
     appliedDiscoveryRadius,
     appliedLocalityType,
     requestLiveLocation,
     isRequestingLocation,
     setIsLocationModalOpen,
   } = useApp();
+
+  if (!userLocation || locationPermission !== 'GRANTED') {
+    return <LocationGate />;
+  }
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);

@@ -22,6 +22,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { LocationGate } from '../location/LocationGate';
 
 export const ConsumerDashboard: React.FC = () => {
   const {
@@ -34,7 +35,13 @@ export const ConsumerDashboard: React.FC = () => {
     activeDelivery,
     setSelectedOrderForTracking,
     setSelectedOrderForReceipt,
+    userLocation,
+    locationPermission,
   } = useApp();
+
+  if (!userLocation || locationPermission !== 'GRANTED') {
+    return <LocationGate />;
+  }
 
   const recommendedItems = listings.slice(0, 4);
   const activeOrders = orders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED');

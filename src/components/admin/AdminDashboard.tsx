@@ -20,8 +20,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { NGO, AuditLog, LedgerEntry } from '../../types';
-import { LocationSettingsTab } from './LocationSettingsTab';
+import { AdminPricingTab } from './AdminPricingTab';
 import { IdentityManagementTab } from './IdentityManagementTab';
+import { LocationSettingsTab } from './LocationSettingsTab';
 import { Users } from 'lucide-react';
 
 interface MockVerificationDoc {
@@ -44,6 +45,7 @@ export const AdminDashboard: React.FC = () => {
     activeDelivery,
     triggerToast,
     addAuditLog,
+    setAdminPreviewRole,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'verifications' | 'fleet' | 'ledger' | 'audit' | 'disputes' | 'fraud' | 'location' | 'identities'>('verifications');
@@ -189,6 +191,44 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Admin "View As" Inspection Toolbar */}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-base shadow-sm">
+            👁️
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+              Admin Experience Preview ("View As" Feature)
+            </h3>
+            <p className="text-xs text-amber-800">
+              Inspect the platform as Consumer, Business, or NGO without changing actual database credentials or roles.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAdminPreviewRole('CONSUMER')}
+            className="px-3.5 py-2 bg-white hover:bg-amber-100 text-amber-950 text-xs font-bold rounded-xl border border-amber-300 shadow-xs transition-all cursor-pointer"
+          >
+            View as Consumer
+          </button>
+          <button
+            onClick={() => setAdminPreviewRole('BUSINESS')}
+            className="px-3.5 py-2 bg-white hover:bg-amber-100 text-amber-950 text-xs font-bold rounded-xl border border-amber-300 shadow-xs transition-all cursor-pointer"
+          >
+            View as Business
+          </button>
+          <button
+            onClick={() => setAdminPreviewRole('NGO')}
+            className="px-3.5 py-2 bg-white hover:bg-amber-100 text-amber-950 text-xs font-bold rounded-xl border border-amber-300 shadow-xs transition-all cursor-pointer"
+          >
+            View as NGO
+          </button>
+        </div>
+      </div>
+
       {/* 4 Top KPI Admin Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
@@ -271,6 +311,18 @@ export const AdminDashboard: React.FC = () => {
           }`}
         >
           Fraud Radar ({fraudSignals.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pricing')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+            activeTab === 'pricing'
+              ? 'bg-emerald-700 text-white'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <DollarSign className="w-3.5 h-3.5" />
+          <span>Pricing & Revenue Rules</span>
         </button>
 
         <button
@@ -589,6 +641,9 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Tab: Pricing & Revenue Rules Engine */}
+      {activeTab === 'pricing' && <AdminPricingTab />}
 
       {/* Tab 5: Authoritative Geo-Radius & Location Engine Policy Management */}
       {activeTab === 'location' && <LocationSettingsTab />}

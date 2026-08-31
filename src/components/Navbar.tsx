@@ -379,7 +379,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
               <div className="flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
                 <span className="font-semibold text-slate-900 max-w-[120px] sm:max-w-[160px] truncate">
-                  {userLocation.localityName.split('(')[0].trim()}
+                  {userLocation ? userLocation.localityName.split('(')[0].trim() : 'Detecting GPS...'}
                 </span>
               </div>
               <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-md bg-emerald-100/70 text-emerald-800 font-bold text-[10px]">

@@ -1628,6 +1628,47 @@ async function startServer() {
     res.json(result);
   });
 
+  // POST /api/admin/login - Secure Admin Authentication
+  app.post('/api/admin/login', (req, res) => {
+    const { email, password } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Admin email and password are required.' });
+    }
+
+    const normEmail = normalizeEmail(email);
+    const user = serverAccountService.findUserByEmail(normEmail);
+
+    if (!user || user.role !== 'ADMIN') {
+      serverAccountService.recordAuditLog(
+        'system-admin',
+        'ADMIN',
+        'ADMIN_LOGIN_FAILED',
+        `Failed admin login attempt for email: ${normEmail}`,
+        clientIp,
+        'admin-login'
+      );
+      return res.status(401).json({ success: false, error: 'Invalid admin credentials.' });
+    }
+
+    const result = serverAccountService.authenticateUser(normEmail, password, 'admin-console', clientIp);
+    if (!result.success || result.user?.role !== 'ADMIN') {
+      return res.status(401).json({ success: false, error: 'Invalid admin credentials.' });
+    }
+
+    serverAccountService.recordAuditLog(
+      result.user.id,
+      'ADMIN',
+      'ADMIN_LOGIN_SUCCESS',
+      `Admin ${result.user.email} successfully authenticated from IP ${clientIp}`,
+      clientIp,
+      'admin-console'
+    );
+
+    res.json({ success: true, user: result.user });
+  });
+
   // 19. POST /api/auth/verify-email - Email Verification
   app.post('/api/auth/verify-email', (req, res) => {
     const { email } = req.body;
@@ -1775,6 +1816,61 @@ async function startServer() {
       success: true,
       logs,
       roleChanges,
+    });
+  });
+
+  // ============================================================================
+  // 29. FINANCIAL PRICING, MONEY FLOW & LEDGER ENDPOINTS
+  // ============================================================================
+  import('./src/server/orderPricingService').then(({ orderPricingService }) => {
+    // Get current financial configuration bundle
+    app.get('/api/financial/config', (req, res) => {
+      res.json({ success: true, config: orderPricingService.getConfig() });
+    });
+
+    // Admin update financial configuration
+    app.post('/api/admin/financial/config', (req, res) => {
+      const { adminId, adminEmail, ...updates } = req.body;
+      if (!adminId || !adminEmail) {
+        return res.status(401).json({ success: false, error: 'Admin authentication required.' });
+      }
+      const updated = orderPricingService.updateConfig(updates, adminId, adminEmail);
+      res.json({ success: true, config: updated });
+    });
+
+    // Admin get financial audit logs
+    app.get('/api/admin/financial/audit-logs', (req, res) => {
+      res.json({ success: true, auditLogs: orderPricingService.getAuditLogs() });
+    });
+
+    // Calculate server-authoritative order pricing snapshot (Never trust client pricing)
+    app.post('/api/orders/calculate-pricing', (req, res) => {
+      const { subtotalPaise, discountPaise = 0, distanceKm = 4.5 } = req.body;
+      if (typeof subtotalPaise !== 'number' || subtotalPaise < 0) {
+        return res.status(400).json({ success: false, error: 'Invalid subtotal amount.' });
+      }
+      const snapshot = orderPricingService.calculateOrderPricing(subtotalPaise, discountPaise, distanceKm);
+      res.json({ success: true, snapshot });
+    });
+
+    // Get all double-entry ledger entries and reconciliation records (Admin)
+    app.get('/api/admin/financial/ledgers', (req, res) => {
+      res.json({ success: true, ledgers: orderPricingService.getLedgers() });
+    });
+
+    // Get NGO logistics settlements
+    app.get('/api/ngo/settlements', (req, res) => {
+      res.json({ success: true, settlements: orderPricingService.getNGOSettlements() });
+    });
+
+    // Admin or NGO update settlement status
+    app.post('/api/admin/ngo/settlements/update', (req, res) => {
+      const { settlementId, status } = req.body;
+      const success = orderPricingService.updateNGOSettlementStatus(settlementId, status);
+      if (!success) {
+        return res.status(404).json({ success: false, error: 'Settlement record not found.' });
+      }
+      res.json({ success: true, settlements: orderPricingService.getNGOSettlements() });
     });
   });
 

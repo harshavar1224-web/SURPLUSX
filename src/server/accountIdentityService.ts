@@ -13,6 +13,7 @@
  * 6. Authorized Admin-only Role Modification with Mandatory Audit Logging.
  */
 
+import bcrypt from 'bcryptjs';
 import {
   User,
   UserRole,
@@ -285,6 +286,26 @@ class AccountIdentityDatabase {
         isBlocked: false,
         createdAt: '2024-04-05T07:45:00.000Z',
         updatedAt: '2024-04-05T07:45:00.000Z',
+      },
+      {
+        id: 'user-owner-admin-primary',
+        name: 'SurplusX Platform Owner',
+        email: 'surplusx.support@gmail.com',
+        phone: '+919876543210',
+        role: 'ADMIN',
+        city: 'Bangalore HQ',
+        isVerified: true,
+        joinedDate: 'January 2026',
+        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+        emailVerified: true,
+        phoneVerified: true,
+        roleLocked: true,
+        deviceBindingId: 'dev-owner-admin-01',
+        passwordHash: bcrypt.hashSync('surplusai@1224', 12),
+        loginAttempts: 0,
+        isBlocked: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
       },
     ];
 
@@ -1295,12 +1316,22 @@ class AccountIdentityDatabase {
       };
     }
 
-    // Password verification (allows demo testing with resilience)
-    if (password && password.length < 3) {
-      return {
-        success: false,
-        error: 'Invalid password. Password must be at least 4 characters.',
-      };
+    // Password verification with bcrypt support
+    if (password) {
+      if (account.passwordHash && (account.passwordHash.startsWith('$2a$') || account.passwordHash.startsWith('$2b$'))) {
+        const isMatch = bcrypt.compareSync(password, account.passwordHash);
+        if (!isMatch) {
+          return {
+            success: false,
+            error: account.role === 'ADMIN' ? 'Invalid admin credentials.' : 'Incorrect password. Please try again.',
+          };
+        }
+      } else if (password.length < 3) {
+        return {
+          success: false,
+          error: 'Invalid password. Password must be at least 4 characters.',
+        };
+      }
     }
 
     // Check device binding
