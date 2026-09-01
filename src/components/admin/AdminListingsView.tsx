@@ -26,23 +26,35 @@ export const AdminListingsView: React.FC = () => {
         },
         body: JSON.stringify({ adminId: currentUser?.id }),
       });
+      
       const data = await res.json();
-      if (!res.ok || !data.success) {
+      
+      if (!res.ok) {
+        if (res.status === 403) {
+          throw new Error('You do not have permission to remove this listing.');
+        } else if (res.status === 409) {
+          throw new Error('This listing cannot be removed because it has active transactions.');
+        } else if (res.status === 404) {
+          throw new Error('Listing was not found or already deleted.');
+        } else {
+          throw new Error(data.error || 'Failed to delete listing.');
+        }
+      }
+
+      if (!data.success) {
         throw new Error(data.error || 'Failed to delete listing.');
       }
-      triggerToast(`Listing ${listingToDelete.title} removed successfully.`, 'success');
+      
+      triggerToast(`Listing "${listingToDelete.title}" removed successfully.`, 'success');
       await fetchListings();
+      addAuditLog('LISTING_DELETED', 'INVENTORY', `Admin deleted listing: ${listingToDelete.title} (${listingToDelete.id})`);
+      setListingToDelete(null); // Only close modal on success
     } catch (err: any) {
-      if (err.status === 403) {
-        triggerToast('You do not have permission to remove this listing.', 'error');
-      } else if (err.status === 409) {
-        triggerToast('This listing cannot be removed because it has active transactions.', 'error');
-      } else {
-        triggerToast(err.message || 'Unable to remove listing. Please try again.', 'error');
-      }
+      console.error('Delete error:', err);
+      triggerToast(err.message || 'Unable to remove listing. Please try again.', 'error');
+      // Notice: we DO NOT setListingToDelete(null) here, keeping the modal open for retry
     } finally {
       setIsProcessing(false);
-      setListingToDelete(null);
     }
   };
 

@@ -138,6 +138,7 @@ interface AppContextType {
 
   // Listings & Search
   listings: SurplusListing[];
+  fetchListings: () => Promise<void>;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   selectedCategory: string;
@@ -436,6 +437,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ),
     }));
   });
+
+  const fetchListings = async () => {
+    try {
+      const res = await fetch('/api/admin/listings');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.listings) {
+          // Re-calculate distances based on current user location or defaults
+          const mappedListings = data.listings.map((l: any) => ({
+            ...l,
+            distanceKm: calculateHaversineDistanceKm(
+              userLocation?.latitude || 12.9716,
+              userLocation?.longitude || 77.5946,
+              l.coordinates.lat,
+              l.coordinates.lng
+            ),
+          }));
+          setListings(mappedListings);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching admin listings:', error);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 500]);
@@ -1142,6 +1167,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     fetchRegisteredUsers();
     fetchIdentityAuditLogs();
+    fetchListings();
   }, []);
 
   // Transactional Signup handler with Authoritative Server Validation
@@ -2386,6 +2412,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isLowAccuracyWarning,
         verifyDistanceEligibility,
         listings,
+        fetchListings,
         searchQuery,
         setSearchQuery,
         selectedCategory,
