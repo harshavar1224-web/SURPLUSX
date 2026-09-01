@@ -47,7 +47,7 @@ export interface NavItemConfig {
   view: string;
   badgeKey?: 'orders' | 'messages' | 'notifications' | 'donations' | 'deliveries' | 'verifications' | 'fraud';
   description?: string;
-  category?: 'MAIN' | 'OPERATIONS' | 'COMMUNICATION' | 'ACCOUNT' | 'SYSTEM';
+  category?: 'MAIN' | 'OPERATIONS' | 'COMMUNICATION' | 'ACCOUNT' | 'SYSTEM' | 'ADMINISTRATION';
 }
 
 export const CONSUMER_NAV: NavItemConfig[] = [
@@ -102,26 +102,32 @@ export const NGO_NAV: NavItemConfig[] = [
 ];
 
 export const ADMIN_NAV: NavItemConfig[] = [
+  // MAIN
   { id: 'a-dashboard', label: 'Dashboard', icon: LayoutDashboard, view: 'dashboard', category: 'MAIN' },
+  { id: 'a-impact', label: 'Impact', icon: Leaf, view: 'impact', category: 'MAIN' },
+
+  // OPERATIONS
   { id: 'a-users', label: 'Users', icon: Users, view: 'users', category: 'OPERATIONS' },
   { id: 'a-businesses', label: 'Businesses', icon: Store, view: 'businesses', category: 'OPERATIONS' },
   { id: 'a-ngos', label: 'NGOs', icon: HeartHandshake, view: 'ngos', category: 'OPERATIONS' },
   { id: 'a-listings', label: 'Listings', icon: ShoppingBag, view: 'listings', category: 'OPERATIONS' },
   { id: 'a-orders', label: 'Orders', icon: Package, view: 'orders', badgeKey: 'orders', category: 'OPERATIONS' },
   { id: 'a-donations', label: 'Donations', icon: Gift, view: 'donations', badgeKey: 'donations', category: 'OPERATIONS' },
+  { id: 'a-reservations', label: 'Reservations', icon: CalendarCheck, view: 'reservations', category: 'OPERATIONS' },
   { id: 'a-payments', label: 'Payments', icon: CreditCard, view: 'payments', category: 'OPERATIONS' },
   { id: 'a-settlements', label: 'Settlements', icon: IndianRupee, view: 'settlements', category: 'OPERATIONS' },
   { id: 'a-logistics', label: 'Live Logistics', icon: Truck, view: 'live-logistics', badgeKey: 'deliveries', category: 'OPERATIONS' },
   { id: 'a-map', label: 'Live Map', icon: Map, view: 'live-map', category: 'OPERATIONS' },
-  { id: 'a-messages', label: 'Messages', icon: MessageSquare, view: 'messages', badgeKey: 'messages', category: 'COMMUNICATION' },
-  { id: 'a-impact', label: 'Impact', icon: Leaf, view: 'impact', category: 'MAIN' },
   { id: 'a-analytics', label: 'Analytics', icon: BarChart3, view: 'analytics', category: 'OPERATIONS' },
+
+  // COMMUNICATION
+  { id: 'a-messages', label: 'Messages', icon: MessageSquare, view: 'messages', badgeKey: 'messages', category: 'COMMUNICATION' },
+
+  // SYSTEM
   { id: 'a-verification', label: 'Verification', icon: FileCheck2, view: 'verification', badgeKey: 'verifications', category: 'SYSTEM' },
   { id: 'a-location', label: 'Location & Radius Rules', icon: MapPin, view: 'location-settings', category: 'SYSTEM' },
   { id: 'a-reports', label: 'Reports & Fraud', icon: ShieldAlert, view: 'reports', badgeKey: 'fraud', category: 'SYSTEM' },
   { id: 'a-audit', label: 'Audit Logs', icon: Database, view: 'audit-logs', category: 'SYSTEM' },
-  { id: 'a-settings', label: 'System Settings', icon: Sliders, view: 'system-settings', category: 'SYSTEM' },
-  { id: 'a-profile', label: 'My Profile', icon: User, view: 'profile', category: 'ACCOUNT' },
 ];
 
 export const GUEST_NAV: NavItemConfig[] = [
@@ -146,7 +152,7 @@ export const getNavConfigForRole = (role?: UserRole): NavItemConfig[] => {
     case 'SUPER_ADMIN':
       return [
         ...ADMIN_NAV,
-        { id: 'a-administrators', label: 'Administrators', icon: Users2, view: 'administrators', category: 'SYSTEM' },
+        { id: 'a-administrators', label: 'Administrators', icon: Users2, view: 'administrators', category: 'ADMINISTRATION' },
       ];
     case 'RETAILER':
     case 'RIDER':
