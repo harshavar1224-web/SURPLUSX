@@ -1886,12 +1886,23 @@ async function startServer() {
     const adminId = (req.headers['x-user-id'] as string) || req.body.adminId;
     const userRole = (req.headers['x-user-role'] as UserRole);
 
+    console.log('--- ADMIN LISTING DELETE REQUEST RECEIVED ---');
+    console.log('Listing ID:', id);
+    console.log('Admin ID:', adminId);
+    console.log('Admin Role:', userRole);
+
     if (!userRole || (userRole !== 'ADMIN' && userRole !== 'SUPER_ADMIN')) {
+      console.log('Authorization failed: Insufficient permissions.');
       return res.status(403).json({ success: false, error: 'Unauthorized.' });
     }
 
     const idx = serverListings.findIndex(l => l.id === id);
-    if (idx === -1) return res.status(404).json({ success: false, error: 'Listing no longer exists.' });
+    if (idx === -1) {
+      console.log('Delete failed: Listing not found in serverListings.');
+      return res.status(404).json({ success: false, error: 'Listing no longer exists.' });
+    }
+
+    console.log('Listing found. Checking for active orders...');
 
     // Check for active orders
     const hasActiveOrders = serverOrders.some(o => 
@@ -1900,11 +1911,20 @@ async function startServer() {
       o.status !== 'CANCELLED'
     );
     if (hasActiveOrders) {
+      console.log('Conflict: Active orders exist for this listing.');
       return res.status(409).json({ success: false, error: 'This listing cannot be deleted because it has active reservations or transactions.' });
     }
 
-    const removed = serverListings.splice(idx, 1)[0];
-    serverAccountService.recordAuditLog(adminId || 'admin', userRole, 'LISTING_DELETED', `Listing ${removed.title} removed by ${userRole}.`);
+    console.log('DATABASE DELETE START');
+    const initialLength = serverListings.length;
+    const listingToRemove = serverListings[idx];
+    
+    // Use filter and re-assignment for authoritative mutation
+    serverListings = serverListings.filter(l => l.id !== id);
+    
+    console.log(`DATABASE DELETE SUCCESS: ${listingToRemove.title}. Count: ${initialLength} -> ${serverListings.length}`);
+    
+    serverAccountService.recordAuditLog(adminId || 'admin', userRole, 'LISTING_DELETED', `Listing ${listingToRemove.title} removed by ${userRole}.`);
     
     res.json({ success: true, listings: serverListings });
   });

@@ -16,6 +16,15 @@ export const AdminListingsView: React.FC = () => {
   const handleDeleteConfirm = async () => {
     if (!listingToDelete) return;
     setIsProcessing(true);
+    
+    // DEVELOPMENT DIAGNOSTICS
+    console.log('--- LISTING DELETE START ---');
+    console.log('listingId:', listingToDelete.id);
+    console.log('API URL:', `/api/admin/listings/${listingToDelete.id}`);
+    console.log('HTTP method: DELETE');
+    console.log('Admin ID:', currentUser?.id || 'admin');
+    console.log('Admin Role:', currentUser?.role || 'ADMIN');
+
     try {
       const res = await fetch(`/api/admin/listings/${listingToDelete.id}`, {
         method: 'DELETE',
@@ -27,7 +36,19 @@ export const AdminListingsView: React.FC = () => {
         body: JSON.stringify({ adminId: currentUser?.id }),
       });
       
-      const data = await res.json();
+      console.log('--- LISTING DELETE RESPONSE ---');
+      console.log('status:', res.status);
+      
+      let data;
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+        console.log('response body:', data);
+      } else {
+        const text = await res.text();
+        console.log('response text:', text);
+        data = { success: res.ok };
+      }
       
       if (!res.ok) {
         if (res.status === 403) {
@@ -37,11 +58,11 @@ export const AdminListingsView: React.FC = () => {
         } else if (res.status === 404) {
           throw new Error('Listing was not found or already deleted.');
         } else {
-          throw new Error(data.error || 'Failed to delete listing.');
+          throw new Error(data?.error || 'Failed to delete listing.');
         }
       }
 
-      if (!data.success) {
+      if (data && data.success === false) {
         throw new Error(data.error || 'Failed to delete listing.');
       }
       
@@ -50,9 +71,9 @@ export const AdminListingsView: React.FC = () => {
       addAuditLog('LISTING_DELETED', 'INVENTORY', `Admin deleted listing: ${listingToDelete.title} (${listingToDelete.id})`);
       setListingToDelete(null); // Only close modal on success
     } catch (err: any) {
-      console.error('Delete error:', err);
+      console.error('--- LISTING DELETE ERROR ---');
+      console.error('error:', err);
       triggerToast(err.message || 'Unable to remove listing. Please try again.', 'error');
-      // Notice: we DO NOT setListingToDelete(null) here, keeping the modal open for retry
     } finally {
       setIsProcessing(false);
     }

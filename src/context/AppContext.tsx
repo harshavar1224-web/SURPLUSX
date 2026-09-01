@@ -429,33 +429,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [listings, setListings] = useState<SurplusListing[]>(() => {
     return INITIAL_LISTINGS.map((item) => ({
       ...item,
-      distanceKm: calculateHaversineDistanceKm(
+      distanceKm: calculateHaversineDistance(
         12.9716,
         77.5946,
         item.coordinates.lat,
         item.coordinates.lng
-      ),
+      ).distanceKm,
     }));
   });
 
   const fetchListings = async () => {
+    console.log('--- fetchListings START ---');
     try {
-      const res = await fetch('/api/admin/listings');
+      // Add timestamp to bypass any browser or proxy caching
+      const res = await fetch(`/api/admin/listings?t=${Date.now()}`);
+      console.log('fetchListings status:', res.status);
       if (res.ok) {
         const data = await res.json();
+        console.log('fetchListings data success:', data.success);
         if (data.success && data.listings) {
+          console.log('fetchListings data listings count:', data.listings.length);
           // Re-calculate distances based on current user location or defaults
-          const mappedListings = data.listings.map((l: any) => ({
-            ...l,
-            distanceKm: calculateHaversineDistanceKm(
-              userLocation?.latitude || 12.9716,
-              userLocation?.longitude || 77.5946,
-              l.coordinates.lat,
-              l.coordinates.lng
-            ),
-          }));
+          const mappedListings = data.listings.map((l: any) => {
+            try {
+              return {
+                ...l,
+                distanceKm: calculateHaversineDistanceKm(
+                  userLocation?.latitude || 12.9716,
+                  userLocation?.longitude || 77.5946,
+                  l.coordinates.lat,
+                  l.coordinates.lng
+                ),
+              };
+            } catch (err) {
+              console.warn('Distance calculation failed for listing:', l.id, err);
+              return { ...l, distanceKm: 0 };
+            }
+          });
+          console.log('fetchListings setListings calling with count:', mappedListings.length);
           setListings(mappedListings);
         }
+      } else {
+        console.error('fetchListings failed with status:', res.status);
       }
     } catch (error) {
       console.error('Error fetching admin listings:', error);
