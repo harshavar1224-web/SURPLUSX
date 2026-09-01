@@ -138,6 +138,7 @@ interface AppContextType {
 
   // Listings & Search
   listings: SurplusListing[];
+  setListings: React.Dispatch<React.SetStateAction<SurplusListing[]>>;
   fetchListings: () => Promise<void>;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -2427,6 +2428,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isLowAccuracyWarning,
         verifyDistanceEligibility,
         listings,
+        setListings,
         fetchListings,
         searchQuery,
         setSearchQuery,

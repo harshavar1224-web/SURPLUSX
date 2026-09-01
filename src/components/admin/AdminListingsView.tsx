@@ -3,7 +3,16 @@ import { ShoppingBag, Search, Trash2, Tag, IndianRupee } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const AdminListingsView: React.FC = () => {
-  const { listings, triggerToast, addAuditLog, currentUser, fetchListings } = useApp();
+  const { 
+    listings, 
+    setListings, 
+    triggerToast, 
+    addAuditLog, 
+    currentUser, 
+    fetchListings, 
+    userLocation, 
+    calculateHaversineDistanceKm 
+  } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [listingToDelete, setListingToDelete] = useState<{ id: string; title: string; category: string; quantity: number; price: number; status: string } | null>(null);
@@ -67,7 +76,26 @@ export const AdminListingsView: React.FC = () => {
       }
       
       triggerToast(`Listing "${listingToDelete.title}" removed successfully.`, 'success');
-      await fetchListings();
+      
+      // Authoritatively update listings state using server response if available
+      if (data && data.listings) {
+        console.log('Updating listings from authoritative server response. New count:', data.listings.length);
+        // We need to re-map distances since the server returns raw listings
+        const mappedListings = data.listings.map((l: any) => ({
+          ...l,
+          distanceKm: calculateHaversineDistanceKm(
+            userLocation?.latitude || 12.9716,
+            userLocation?.longitude || 77.5946,
+            l.coordinates.lat,
+            l.coordinates.lng
+          )
+        }));
+        setListings(mappedListings);
+      } else {
+        console.log('Server did not return listings, falling back to fetchListings()');
+        await fetchListings();
+      }
+      
       addAuditLog('LISTING_DELETED', 'INVENTORY', `Admin deleted listing: ${listingToDelete.title} (${listingToDelete.id})`);
       setListingToDelete(null); // Only close modal on success
     } catch (err: any) {

@@ -1903,29 +1903,44 @@ async function startServer() {
     }
 
     console.log('Listing found. Checking for active orders...');
+    console.log('Total orders to check:', serverOrders.length);
 
-    // Check for active orders
-    const hasActiveOrders = serverOrders.some(o => 
+    // Check for active orders using the authoritative serverOrders store
+    const activeOrder = serverOrders.find(o => 
       o.items.some((i: any) => i.listingId === id) && 
       o.status !== 'COMPLETED' && 
       o.status !== 'CANCELLED'
     );
-    if (hasActiveOrders) {
-      console.log('Conflict: Active orders exist for this listing.');
-      return res.status(409).json({ success: false, error: 'This listing cannot be deleted because it has active reservations or transactions.' });
+
+    if (activeOrder) {
+      console.log('CONFLICT DETECTED: Active order found for listing:', id);
+      console.log('Order ID:', activeOrder.id);
+      console.log('Order Status:', activeOrder.status);
+      return res.status(409).json({ 
+        success: false, 
+        error: `Listing cannot be deleted because it is part of an active order (${activeOrder.id}) with status ${activeOrder.status}.` 
+      });
     }
 
-    console.log('DATABASE DELETE START');
+    console.log('--- DATABASE MUTATION START ---');
+    const timestamp = new Date().toISOString();
     const initialLength = serverListings.length;
     const listingToRemove = serverListings[idx];
     
-    // Use filter and re-assignment for authoritative mutation
+    // Authoritative filter-and-assign mutation
     serverListings = serverListings.filter(l => l.id !== id);
     
-    console.log(`DATABASE DELETE SUCCESS: ${listingToRemove.title}. Count: ${initialLength} -> ${serverListings.length}`);
+    const finalLength = serverListings.length;
+    console.log(`[${timestamp}] DELETE SUCCESS: ${listingToRemove.title} (${id})`);
+    console.log(`Count: ${initialLength} -> ${finalLength}`);
+    
+    if (initialLength === finalLength) {
+      console.error('CRITICAL: Filter operation failed to reduce array length!');
+    }
     
     serverAccountService.recordAuditLog(adminId || 'admin', userRole, 'LISTING_DELETED', `Listing ${listingToRemove.title} removed by ${userRole}.`);
     
+    console.log('Sending response with updated listings count:', serverListings.length);
     res.json({ success: true, listings: serverListings });
   });
 
