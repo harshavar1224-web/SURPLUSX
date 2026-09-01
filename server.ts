@@ -1883,27 +1883,19 @@ async function startServer() {
 
   app.delete('/api/admin/listings/:id', (req, res) => {
     const { id } = req.params;
-    const adminId = (req.headers['x-user-id'] as string) || req.body.adminId;
+    const adminId = (req.headers['x-user-id'] as string) || req.body?.adminId;
     const userRole = (req.headers['x-user-role'] as UserRole);
 
-    console.log('--- ADMIN LISTING DELETE REQUEST RECEIVED ---');
-    console.log('Listing ID:', id);
-    console.log('Admin ID:', adminId);
-    console.log('Admin Role:', userRole);
-
     if (!userRole || (userRole !== 'ADMIN' && userRole !== 'SUPER_ADMIN')) {
-      console.log('Authorization failed: Insufficient permissions.');
-      return res.status(403).json({ success: false, error: 'Unauthorized.' });
+      return res.status(403).json({ success: false, error: 'Unauthorized. Admin or Super Admin permissions required.' });
     }
 
     const idx = serverListings.findIndex(l => l.id === id);
     if (idx === -1) {
-      console.log('Delete failed: Listing not found in serverListings.');
       return res.status(404).json({ success: false, error: 'Listing no longer exists.' });
     }
 
-    console.log('Listing found. Checking for active orders...');
-    console.log('Total orders to check:', serverOrders.length);
+    const listingToRemove = serverListings[idx];
 
     // Check for active orders using the authoritative serverOrders store
     const activeOrder = serverOrders.find(o => 
@@ -1913,58 +1905,111 @@ async function startServer() {
     );
 
     if (activeOrder) {
-      console.log('CONFLICT DETECTED: Active order found for listing:', id);
-      console.log('Order ID:', activeOrder.id);
-      console.log('Order Status:', activeOrder.status);
-      return res.status(409).json({ 
-        success: false, 
-        error: `Listing cannot be deleted because it is part of an active order (${activeOrder.id}) with status ${activeOrder.status}.` 
+      // Normal ADMIN is protected from deleting listings with active orders
+      if (userRole !== 'SUPER_ADMIN') {
+        return res.status(409).json({ 
+          success: false, 
+          error: `Listing cannot be deleted because it is part of an active order (${activeOrder.id}) with status ${activeOrder.status}. Super Admin override required to force remove.` 
+        });
+      }
+
+      // SUPER_ADMIN OVERRIDE: Safely force remove listing from active marketplace
+      // Crucial: DO NOT delete the active order (SX-10294), payments, logistics, or audit history
+      serverListings = serverListings.filter(l => l.id !== id);
+
+      // Create an immutable administrative audit event
+      serverAccountService.recordAuditLog(
+        adminId || 'user-super-admin-primary',
+        'SUPER_ADMIN',
+        'LISTING_FORCE_REMOVED',
+        `Super Admin force removed listing "${listingToRemove.title}" (${id}). Related active order ${activeOrder.id} (${activeOrder.status}) preserved with full transaction, logistics, and payment history.`
+      );
+
+      console.log(`[SUPER_ADMIN] Listing ${listingToRemove.title} (${id}) force removed. Active order ${activeOrder.id} preserved. Remaining listings: ${serverListings.length}`);
+      
+      return res.json({ 
+        success: true, 
+        forceRemoved: true,
+        activeOrderId: activeOrder.id,
+        listing: listingToRemove,
+        listings: serverListings 
       });
     }
 
-    console.log('--- DATABASE MUTATION START ---');
-    const timestamp = new Date().toISOString();
-    const initialLength = serverListings.length;
-    const listingToRemove = serverListings[idx];
-    
-    // Authoritative filter-and-assign mutation
+    // Standard listing deletion (no active transactions)
     serverListings = serverListings.filter(l => l.id !== id);
     
-    const finalLength = serverListings.length;
-    console.log(`[${timestamp}] DELETE SUCCESS: ${listingToRemove.title} (${id})`);
-    console.log(`Count: ${initialLength} -> ${finalLength}`);
+    serverAccountService.recordAuditLog(
+      adminId || 'admin', 
+      userRole, 
+      'LISTING_DELETED', 
+      `Listing "${listingToRemove.title}" (${id}) removed by ${userRole}.`
+    );
     
-    if (initialLength === finalLength) {
-      console.error('CRITICAL: Filter operation failed to reduce array length!');
-    }
-    
-    serverAccountService.recordAuditLog(adminId || 'admin', userRole, 'LISTING_DELETED', `Listing ${listingToRemove.title} removed by ${userRole}.`);
-    
-    console.log('Sending response with updated listings count:', serverListings.length);
     res.json({ success: true, listings: serverListings });
+  });
+
+  // Dedicated Administrative Force-Remove Route
+  app.post('/api/admin/listings/:id/force-remove', (req, res) => {
+    const { id } = req.params;
+    const adminId = (req.headers['x-user-id'] as string) || req.body?.adminId;
+    const userRole = (req.headers['x-user-role'] as UserRole);
+
+    if (userRole !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: 'Unauthorized. Force remove is strictly reserved for Super Admin.' });
+    }
+
+    const idx = serverListings.findIndex(l => l.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: 'Listing no longer exists.' });
+    }
+
+    const listingToRemove = serverListings[idx];
+    const activeOrder = serverOrders.find(o => 
+      o.items.some((i: any) => i.listingId === id) && 
+      o.status !== 'COMPLETED' && 
+      o.status !== 'CANCELLED'
+    );
+
+    serverListings = serverListings.filter(l => l.id !== id);
+
+    serverAccountService.recordAuditLog(
+      adminId || 'user-super-admin-primary',
+      'SUPER_ADMIN',
+      'LISTING_FORCE_REMOVED',
+      `Super Admin force removed listing "${listingToRemove.title}" (${id}). Related active order ${activeOrder ? activeOrder.id : 'N/A'} preserved.`
+    );
+
+    res.json({ 
+      success: true, 
+      forceRemoved: true, 
+      activeOrderId: activeOrder?.id, 
+      listing: listingToRemove, 
+      listings: serverListings 
+    });
   });
 
   // Orders Admin Endpoints
   app.get('/api/admin/orders', (req, res) => {
-    res.json({ success: true, orders: INITIAL_ORDERS });
+    res.json({ success: true, orders: serverOrders });
   });
 
   app.patch('/api/admin/orders/:id/status', (req, res) => {
     const { id } = req.params;
     const { status, adminId, reason } = req.body;
-    const order = INITIAL_ORDERS.find(o => o.id === id);
+    const order = serverOrders.find(o => o.id === id);
     if (!order) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
     order.status = status;
     serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'ORDER_OVERRIDE', `Order ${id} status overridden to ${status}. Reason: ${reason || 'Admin action'}`);
-    res.json({ success: true, order, orders: INITIAL_ORDERS });
+    res.json({ success: true, order, orders: serverOrders });
   });
 
   app.delete('/api/admin/orders/:id', (req, res) => {
     const { id } = req.params;
-    const idx = INITIAL_ORDERS.findIndex(o => o.id === id);
+    const idx = serverOrders.findIndex(o => o.id === id);
     if (idx === -1) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
-    INITIAL_ORDERS.splice(idx, 1);
-    res.json({ success: true, orders: INITIAL_ORDERS });
+    serverOrders.splice(idx, 1);
+    res.json({ success: true, orders: serverOrders });
   });
 
   // Verifications Admin Endpoints

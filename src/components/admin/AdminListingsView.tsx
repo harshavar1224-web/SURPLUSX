@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Search, Trash2, Tag, IndianRupee } from 'lucide-react';
+import { ShoppingBag, Search, Trash2, Tag, IndianRupee, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const AdminListingsView: React.FC = () => {
   const { 
     listings, 
     setListings, 
+    orders,
     triggerToast, 
     addAuditLog, 
     currentUser, 
@@ -22,48 +23,47 @@ export const AdminListingsView: React.FC = () => {
     l.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const activeOrderForListing = listingToDelete ? orders?.find(o => 
+    o.items?.some((i: any) => i.listingId === listingToDelete.id) && 
+    o.status !== 'COMPLETED' && 
+    o.status !== 'CANCELLED'
+  ) : null;
+
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
   const handleDeleteConfirm = async () => {
     if (!listingToDelete) return;
     setIsProcessing(true);
-    
-    // DEVELOPMENT DIAGNOSTICS
-    console.log('--- LISTING DELETE START ---');
-    console.log('listingId:', listingToDelete.id);
-    console.log('API URL:', `/api/admin/listings/${listingToDelete.id}`);
-    console.log('HTTP method: DELETE');
-    console.log('Admin ID:', currentUser?.id || 'admin');
-    console.log('Admin Role:', currentUser?.role || 'ADMIN');
 
     try {
-      const res = await fetch(`/api/admin/listings/${listingToDelete.id}`, {
-        method: 'DELETE',
+      const isForceRemove = !!activeOrderForListing;
+      const endpoint = isForceRemove 
+        ? `/api/admin/listings/${listingToDelete.id}/force-remove`
+        : `/api/admin/listings/${listingToDelete.id}`;
+
+      const res = await fetch(endpoint, {
+        method: isForceRemove ? 'POST' : 'DELETE',
         headers: { 
           'Content-Type': 'application/json',
-          'x-user-id': currentUser?.id || 'admin',
-          'x-user-role': currentUser?.role || 'ADMIN'
+          'x-user-id': currentUser?.id || 'user-super-admin-primary',
+          'x-user-role': currentUser?.role || 'SUPER_ADMIN'
         },
-        body: JSON.stringify({ adminId: currentUser?.id }),
+        body: JSON.stringify({ adminId: currentUser?.id || 'user-super-admin-primary' }),
       });
-      
-      console.log('--- LISTING DELETE RESPONSE ---');
-      console.log('status:', res.status);
       
       let data;
       const contentType = res.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         data = await res.json();
-        console.log('response body:', data);
       } else {
-        const text = await res.text();
-        console.log('response text:', text);
         data = { success: res.ok };
       }
       
-      if (!res.ok) {
+      if (!res.ok || data?.success === false) {
         if (res.status === 403) {
-          throw new Error('You do not have permission to remove this listing.');
+          throw new Error('Unauthorized. Super Admin permissions required to force remove listings with active orders.');
         } else if (res.status === 409) {
-          throw new Error('This listing cannot be removed because it has active transactions.');
+          throw new Error(data?.error || 'This listing cannot be removed because it has active transactions.');
         } else if (res.status === 404) {
           throw new Error('Listing was not found or already deleted.');
         } else {
@@ -71,36 +71,33 @@ export const AdminListingsView: React.FC = () => {
         }
       }
 
-      if (data && data.success === false) {
-        throw new Error(data.error || 'Failed to delete listing.');
+      if (data?.forceRemoved || isForceRemove) {
+        triggerToast(`Listing "${listingToDelete.title}" force removed by Super Admin. Active order ${data?.activeOrderId || activeOrderForListing?.id || ''} preserved.`, 'success');
+        addAuditLog('LISTING_FORCE_REMOVED', 'INVENTORY', `Super Admin force removed listing: ${listingToDelete.title} (${listingToDelete.id}). Related active order ${data?.activeOrderId || activeOrderForListing?.id} preserved.`);
+      } else {
+        triggerToast(`Listing "${listingToDelete.title}" removed successfully.`, 'success');
+        addAuditLog('LISTING_DELETED', 'INVENTORY', `Admin deleted listing: ${listingToDelete.title} (${listingToDelete.id})`);
       }
       
-      triggerToast(`Listing "${listingToDelete.title}" removed successfully.`, 'success');
-      
-      // Authoritatively update listings state using server response if available
+      // Authoritatively update listings state using server response
       if (data && data.listings) {
-        console.log('Updating listings from authoritative server response. New count:', data.listings.length);
-        // We need to re-map distances since the server returns raw listings
         const mappedListings = data.listings.map((l: any) => ({
           ...l,
           distanceKm: calculateHaversineDistanceKm(
             userLocation?.latitude || 12.9716,
             userLocation?.longitude || 77.5946,
-            l.coordinates.lat,
-            l.coordinates.lng
+            l.coordinates?.lat || 12.9716,
+            l.coordinates?.lng || 77.5946
           )
         }));
         setListings(mappedListings);
       } else {
-        console.log('Server did not return listings, falling back to fetchListings()');
         await fetchListings();
       }
       
-      addAuditLog('LISTING_DELETED', 'INVENTORY', `Admin deleted listing: ${listingToDelete.title} (${listingToDelete.id})`);
       setListingToDelete(null); // Only close modal on success
     } catch (err: any) {
-      console.error('--- LISTING DELETE ERROR ---');
-      console.error('error:', err);
+      console.error('LISTING DELETE ERROR:', err);
       triggerToast(err.message || 'Unable to remove listing. Please try again.', 'error');
     } finally {
       setIsProcessing(false);
@@ -194,15 +191,27 @@ export const AdminListingsView: React.FC = () => {
       {listingToDelete && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center">
-                <Trash2 className="w-6 h-6" />
+            {activeOrderForListing ? (
+              <div className="flex items-center gap-3 text-amber-600">
+                <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Active Order Detected</h3>
+                  <p className="text-xs text-amber-700 font-medium">Order {activeOrderForListing.id} • {activeOrderForListing.status}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Delete Listing?</h3>
-                <p className="text-xs text-slate-500">Permanent platform removal</p>
+            ) : (
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Delete Listing?</h3>
+                  <p className="text-xs text-slate-500">Permanent platform removal</p>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="bg-slate-50 p-4 rounded-xl space-y-2 text-xs text-slate-700 border border-slate-200">
               <div><strong>Listing:</strong> {listingToDelete.title}</div>
@@ -212,25 +221,53 @@ export const AdminListingsView: React.FC = () => {
               <div><strong>Status:</strong> {listingToDelete.status}</div>
             </div>
 
-            <p className="text-xs text-rose-600 font-medium">
-              "This action will remove this listing from the active platform."
-            </p>
+            {activeOrderForListing ? (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                <p className="font-semibold text-amber-950">Super Admin Force Removal</p>
+                <p>
+                  This listing is currently associated with active order <strong>{activeOrderForListing.id}</strong>. Removing this listing will prevent new reservations while preserving the existing order and transaction history.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-rose-600 font-medium">
+                This action will remove this listing from the active platform marketplace.
+              </p>
+            )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 disabled={isProcessing}
                 onClick={() => setListingToDelete(null)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
-              <button
-                disabled={isProcessing}
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-2"
-              >
-                {isProcessing ? 'Deleting...' : 'Delete Listing'}
-              </button>
+              {activeOrderForListing ? (
+                isSuperAdmin ? (
+                  <button
+                    disabled={isProcessing}
+                    onClick={handleDeleteConfirm}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    {isProcessing ? 'Removing...' : 'Force Remove Listing'}
+                  </button>
+                ) : (
+                  <button
+                    disabled={true}
+                    className="px-4 py-2 rounded-xl bg-slate-200 text-slate-400 text-xs font-semibold cursor-not-allowed"
+                  >
+                    Super Admin Required
+                  </button>
+                )
+              ) : (
+                <button
+                  disabled={isProcessing}
+                  onClick={handleDeleteConfirm}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  {isProcessing ? 'Deleting...' : 'Delete Listing'}
+                </button>
+              )}
             </div>
           </div>
         </div>
