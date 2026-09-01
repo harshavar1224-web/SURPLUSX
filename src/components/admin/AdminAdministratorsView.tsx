@@ -80,17 +80,23 @@ export const AdminAdministratorsView: React.FC = () => {
                   </span>
                 </td>
                 <td className="py-3.5 px-6 text-right">
-                  {admin.role !== 'SUPER_ADMIN' && currentUser?.role === 'SUPER_ADMIN' && (
-                    <button
-                      onClick={() => {
-                        triggerToast(`Revoked admin access for ${admin.name}.`, 'warning');
-                        addAuditLog('ADMIN_REVOKED', 'SUPER_ADMIN', `Revoked admin role from ${admin.email}.`);
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      title="Revoke Admin Access"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  {admin.role === 'SUPER_ADMIN' || admin.isProtectedOwner ? (
+                    <span className="text-[11px] font-medium text-slate-400 italic pr-2">
+                      Protected Owner
+                    </span>
+                  ) : (
+                    currentUser?.role === 'SUPER_ADMIN' && (
+                      <button
+                        onClick={() => {
+                          triggerToast(`Revoked admin access for ${admin.name}.`, 'warning');
+                          addAuditLog('ADMIN_REVOKED', 'SUPER_ADMIN', `Revoked admin role from ${admin.email}.`);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Revoke Admin Access"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )
                   )}
                 </td>
               </tr>

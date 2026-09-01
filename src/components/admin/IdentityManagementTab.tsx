@@ -371,7 +371,11 @@ export const IdentityManagementTab: React.FC = () => {
                     </td>
 
                     <td className="py-3 px-4 text-right">
-                      {user.role === 'ADMIN' ? (
+                      {user.role === 'SUPER_ADMIN' || user.isProtectedOwner ? (
+                        <span className="text-[11px] font-medium text-slate-400 italic pr-2">
+                          No actions available
+                        </span>
+                      ) : user.role === 'ADMIN' ? (
                         <span className="text-[11px] text-slate-400 font-bold italic">
                           Protected Admin
                         </span>

@@ -1759,6 +1759,10 @@ async function startServer() {
       return res.status(404).json({ success: false, error: 'Record no longer exists.' });
     }
 
+    if (targetUser.role === 'SUPER_ADMIN' || targetUser.isProtectedOwner || targetUser.id === 'user-super-admin-primary' || targetUser.id === 'user-super-admin-1') {
+      return res.status(403).json({ success: false, error: 'Protected Super Admin account cannot be modified, suspended, or deleted.' });
+    }
+
     targetUser.isBlocked = status === 'SUSPENDED';
     targetUser.updatedAt = new Date().toISOString();
 
@@ -1779,6 +1783,11 @@ async function startServer() {
     const adminId = (req.headers['x-admin-id'] as string) || req.body.adminId || '';
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
 
+    const targetUser = serverAccountService.findUserById(targetUserId);
+    if (targetUser && (targetUser.role === 'SUPER_ADMIN' || targetUser.isProtectedOwner || targetUser.id === 'user-super-admin-primary' || targetUser.id === 'user-super-admin-1')) {
+      return res.status(403).json({ success: false, error: 'Protected Super Admin account cannot be modified or deleted.' });
+    }
+
     const result = serverAccountService.deleteUser({
       adminId,
       targetUserId,
@@ -1786,7 +1795,8 @@ async function startServer() {
     });
 
     if (!result.success) {
-      return res.status(400).json(result);
+      const statusCode = result.error?.includes('Protected') || result.error?.includes('Unauthorized') || result.error?.includes('permission') || result.error?.includes('cannot delete') ? 403 : 400;
+      return res.status(statusCode).json(result);
     }
 
     res.json(result);
@@ -2012,6 +2022,11 @@ async function startServer() {
       return res.status(403).json({ success: false, error: 'Unauthorized: Super Admin privileges required.' });
     }
 
+    const targetUser = serverAccountService.findUserById(targetAdminId);
+    if (targetUser && (targetUser.role === 'SUPER_ADMIN' || targetUser.isProtectedOwner || targetUser.id === 'user-super-admin-primary' || targetUser.id === 'user-super-admin-1')) {
+      return res.status(403).json({ success: false, error: 'Protected Super Admin account cannot be modified or deleted.' });
+    }
+
     const result = serverAccountService.deleteUser({
       adminId,
       targetUserId: targetAdminId,
@@ -2019,7 +2034,8 @@ async function startServer() {
     });
 
     if (!result.success) {
-      return res.status(400).json(result);
+      const statusCode = result.error?.includes('Protected') || result.error?.includes('Unauthorized') || result.error?.includes('permission') || result.error?.includes('cannot delete') ? 403 : 400;
+      return res.status(statusCode).json(result);
     }
 
     res.json(result);

@@ -205,30 +205,36 @@ export const AdminUsersView: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-6 text-slate-500">{u.joinedDate || 'Recent'}</td>
                     <td className="py-3.5 px-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          disabled={isProcessing}
-                          onClick={() => handleToggleSuspend(u.id, !!u.isBlocked, u.name)}
-                          className={`p-1.5 rounded-lg transition-colors ${
-                            u.isBlocked
-                              ? 'text-emerald-600 hover:bg-emerald-50'
-                              : 'text-amber-600 hover:bg-amber-50'
-                          }`}
-                          title={u.isBlocked ? 'Restore User' : 'Suspend User'}
-                          aria-label={u.isBlocked ? 'Restore User' : 'Suspend User'}
-                        >
-                          <Ban className="w-4 h-4" />
-                        </button>
-                        <button
-                          disabled={isProcessing}
-                          onClick={() => setUserToDelete({ id: u.id, name: u.name, role: u.role, email: u.email })}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Delete User Permanently"
-                          aria-label="Delete User Permanently"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {u.role === 'SUPER_ADMIN' || u.isProtectedOwner ? (
+                        <span className="text-[11px] font-medium text-slate-400 italic pr-2">
+                          No actions available
+                        </span>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            disabled={isProcessing}
+                            onClick={() => handleToggleSuspend(u.id, !!u.isBlocked, u.name)}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              u.isBlocked
+                                ? 'text-emerald-600 hover:bg-emerald-50'
+                                : 'text-amber-600 hover:bg-amber-50'
+                            }`}
+                            title={u.isBlocked ? 'Restore User' : 'Suspend User'}
+                            aria-label={u.isBlocked ? 'Restore User' : 'Suspend User'}
+                          >
+                            <Ban className="w-4 h-4" />
+                          </button>
+                          <button
+                            disabled={isProcessing}
+                            onClick={() => setUserToDelete({ id: u.id, name: u.name, role: u.role, email: u.email })}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Delete User Permanently"
+                            aria-label="Delete User Permanently"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

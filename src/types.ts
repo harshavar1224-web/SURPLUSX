@@ -429,6 +429,7 @@ export interface User {
   isVerified: boolean;
   deviceBindingId?: string;
   joinedDate: string;
+  isProtectedOwner?: boolean;
   // Strict Identity & Role Lock System
   accountStatus?: AccountStatus;
   emailVerified?: boolean;
