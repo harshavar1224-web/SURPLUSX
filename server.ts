@@ -19,13 +19,13 @@ import {
 import { phoneVerificationService } from './src/server/phoneVerificationService';
 import { emailVerificationService } from './src/server/emailVerificationService';
 import { emailService } from './src/server/emailService';
-import { INITIAL_LISTINGS } from './src/data/mockData';
+import { INITIAL_LISTINGS, INITIAL_ORDERS } from './src/data/mockData';
 import { UserRole, LocationRadiusPolicyType, LocalityType, DeliveryTracking, DeliveryEvent, DeliveryLocation, isAdminRole } from './src/types';
 
 dotenv.config();
 
 // In-memory store of active surplus listings on backend
-let serverListings: any[] = [];
+let serverListings: any[] = [...INITIAL_LISTINGS];
 
 // ============================================================================
 // MAPPLS OAUTH 2.0 TOKEN MANAGER & CREDENTIAL SECURITY
@@ -1820,7 +1820,7 @@ async function startServer() {
     if (idx === -1) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
     const removed = serverBusinessesStore.splice(idx, 1)[0];
     // Also cleanup listings
-    serverListingsAdmin = serverListingsAdmin.filter(l => l.storeId !== id);
+    serverListings = serverListings.filter(l => l.storeId !== id);
     serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'BUSINESS_APPROVED', `Business ${removed.name} deleted permanently.`);
     res.json({ success: true, businesses: serverBusinessesStore });
   });
@@ -1973,7 +1973,7 @@ async function startServer() {
     if (!admin || admin.role !== 'SUPER_ADMIN') {
       return res.status(403).json({ success: false, error: 'Unauthorized: Super Admin privileges required.' });
     }
-    const result = await serverAccountService.signup({
+    const result = await serverAccountService.createAdministrator({
       name,
       email,
       phone,

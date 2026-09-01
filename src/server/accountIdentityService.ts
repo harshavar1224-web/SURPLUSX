@@ -1391,6 +1391,92 @@ class AccountIdentityDatabase {
     };
   }
 
+  public async createAdministrator(params: {
+    name: string;
+    email: string;
+    phone: string;
+    role?: 'ADMIN' | 'SUPER_ADMIN';
+    password?: string;
+    city?: string;
+    ipAddress?: string;
+    deviceId?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
+    const unlock = await this.mutex.lock();
+    try {
+      const cleanName = params.name ? params.name.trim() : '';
+      if (!cleanName || cleanName.length < 2) {
+        return { success: false, error: 'Valid full name required (min 2 characters).' };
+      }
+      const normEmail = normalizeEmail(params.email);
+      if (!validateEmailFormat(normEmail)) {
+        return { success: false, error: 'Valid email address required.' };
+      }
+      const phoneRes = normalizeIndianPhone(params.phone);
+      if (!phoneRes.valid) {
+        return { success: false, error: phoneRes.error || 'Valid 10-digit Indian mobile number required.' };
+      }
+      const normPhone = phoneRes.normalized;
+
+      if (this.emailToUserId.has(normEmail)) {
+        return { success: false, error: 'This email is already registered.' };
+      }
+      if (this.phoneToUserId.has(normPhone)) {
+        return { success: false, error: 'This mobile number is already registered.' };
+      }
+
+      const userId = `admin-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const nowIso = new Date().toISOString();
+      const role = params.role || 'ADMIN';
+      const passwordHash = params.password ? bcrypt.hashSync(params.password, 10) : bcrypt.hashSync('Admin@123', 10);
+
+      const newAdmin: StoredAccount = {
+        id: userId,
+        name: cleanName,
+        email: normEmail,
+        phone: normPhone,
+        role,
+        city: params.city || 'Bangalore HQ',
+        isVerified: true,
+        accountStatus: 'ACTIVE',
+        emailVerified: true,
+        emailVerifiedAt: nowIso,
+        emailVerificationStatus: 'VERIFIED',
+        phoneVerified: true,
+        phoneVerifiedAt: nowIso,
+        phoneVerificationStatus: 'VERIFIED',
+        roleLocked: true,
+        maskedPhone: `+91 ******${normPhone.slice(-4)}`,
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+        joinedDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        passwordHash,
+        loginAttempts: 0,
+        isBlocked: false,
+        lastLoginAt: nowIso,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        deviceBindingId: params.deviceId || `dev-admin-${Date.now().toString(36)}`,
+      };
+
+      this.usersById.set(userId, newAdmin);
+      this.emailToUserId.set(normEmail, userId);
+      this.phoneToUserId.set(normPhone, userId);
+
+      this.recordAuditLog(
+        userId,
+        role,
+        'ADMIN_CREATED',
+        `Administrator account created for ${cleanName} (${normEmail}).`,
+        params.ipAddress || '127.0.0.1',
+        newAdmin.deviceBindingId || 'super-admin-console'
+      );
+
+      const { passwordHash: _, loginAttempts: __, isBlocked: ___, ...publicUser } = newAdmin;
+      return { success: true, user: publicUser };
+    } finally {
+      unlock();
+    }
+  }
+
   public getAdministrators(): User[] {
     const admins: User[] = [];
     for (const acc of this.usersById.values()) {
