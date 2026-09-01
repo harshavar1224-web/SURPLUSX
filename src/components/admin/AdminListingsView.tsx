@@ -3,17 +3,47 @@ import { ShoppingBag, Search, Trash2, Tag, IndianRupee } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const AdminListingsView: React.FC = () => {
-  const { listings, triggerToast, addAuditLog } = useApp();
+  const { listings, triggerToast, addAuditLog, currentUser, fetchListings } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [listingToDelete, setListingToDelete] = useState<{ id: string; title: string; category: string; quantity: number; price: number; status: string } | null>(null);
 
   const filtered = listings.filter((l) =>
     l.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     l.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleRemove = (title: string, id: string) => {
-    triggerToast(`Listing ${title} removed by administrator.`, 'success');
-    addAuditLog('LISTING_REMOVED', 'ADMIN', `Removed listing ${title} (${id}).`);
+  const handleDeleteConfirm = async () => {
+    if (!listingToDelete) return;
+    setIsProcessing(true);
+    try {
+      const res = await fetch(`/api/admin/listings/${listingToDelete.id}`, {
+        method: 'DELETE',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-id': currentUser?.id || 'admin',
+          'x-user-role': currentUser?.role || 'ADMIN'
+        },
+        body: JSON.stringify({ adminId: currentUser?.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete listing.');
+      }
+      triggerToast(`Listing ${listingToDelete.title} removed successfully.`, 'success');
+      await fetchListings();
+    } catch (err: any) {
+      if (err.status === 403) {
+        triggerToast('You do not have permission to remove this listing.', 'error');
+      } else if (err.status === 409) {
+        triggerToast('This listing cannot be removed because it has active transactions.', 'error');
+      } else {
+        triggerToast(err.message || 'Unable to remove listing. Please try again.', 'error');
+      }
+    } finally {
+      setIsProcessing(false);
+      setListingToDelete(null);
+    }
   };
 
   return (
@@ -75,7 +105,7 @@ export const AdminListingsView: React.FC = () => {
                     </div>
                   </td>
                   <td className="py-3.5 px-6 font-medium text-slate-600">{l.category}</td>
-                  <td className="py-3.5 px-6 font-bold text-slate-800">{l.quantity} units</td>
+                  <td className="py-3.5 px-6 font-bold text-slate-800">{l.quantityAvailable} units</td>
                   <td className="py-3.5 px-6 font-extrabold text-emerald-600">₹{l.discountPrice} <span className="line-through text-slate-400 font-normal">₹{l.originalPrice}</span></td>
                   <td className="py-3.5 px-6">
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -83,13 +113,15 @@ export const AdminListingsView: React.FC = () => {
                     </span>
                   </td>
                   <td className="py-3.5 px-6 text-right">
-                    <button
-                      onClick={() => handleRemove(l.title, l.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                      title="Remove Listing"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <button
+                        disabled={isProcessing}
+                        onClick={() => setListingToDelete({ id: l.id, title: l.title, category: l.category, quantity: l.quantityAvailable, price: l.discountPrice, status: l.status })}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        title="Delete Listing"
+                        aria-label="Delete Listing"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                   </td>
                 </tr>
               ))
@@ -97,6 +129,51 @@ export const AdminListingsView: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {listingToDelete && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Delete Listing?</h3>
+                <p className="text-xs text-slate-500">Permanent platform removal</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl space-y-2 text-xs text-slate-700 border border-slate-200">
+              <div><strong>Listing:</strong> {listingToDelete.title}</div>
+              <div><strong>Category:</strong> {listingToDelete.category}</div>
+              <div><strong>Quantity:</strong> {listingToDelete.quantity}</div>
+              <div><strong>Price:</strong> ₹{listingToDelete.price}</div>
+              <div><strong>Status:</strong> {listingToDelete.status}</div>
+            </div>
+
+            <p className="text-xs text-rose-600 font-medium">
+              "This action will remove this listing from the active platform."
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                disabled={isProcessing}
+                onClick={() => setListingToDelete(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isProcessing}
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-2"
+              >
+                {isProcessing ? 'Deleting...' : 'Delete Listing'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -26,6 +26,7 @@ dotenv.config();
 
 // In-memory store of active surplus listings on backend
 let serverListings: any[] = [...INITIAL_LISTINGS];
+let serverOrders: any[] = [...INITIAL_ORDERS];
 
 // ============================================================================
 // MAPPLS OAUTH 2.0 TOKEN MANAGER & CREDENTIAL SECURITY
@@ -1882,11 +1883,29 @@ async function startServer() {
 
   app.delete('/api/admin/listings/:id', (req, res) => {
     const { id } = req.params;
-    const { adminId } = req.body;
+    const adminId = (req.headers['x-user-id'] as string) || req.body.adminId;
+    const userRole = (req.headers['x-user-role'] as UserRole);
+
+    if (!userRole || (userRole !== 'ADMIN' && userRole !== 'SUPER_ADMIN')) {
+      return res.status(403).json({ success: false, error: 'Unauthorized.' });
+    }
+
     const idx = serverListings.findIndex(l => l.id === id);
-    if (idx === -1) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Listing no longer exists.' });
+
+    // Check for active orders
+    const hasActiveOrders = serverOrders.some(o => 
+      o.items.some((i: any) => i.listingId === id) && 
+      o.status !== 'COMPLETED' && 
+      o.status !== 'CANCELLED'
+    );
+    if (hasActiveOrders) {
+      return res.status(409).json({ success: false, error: 'This listing cannot be deleted because it has active reservations or transactions.' });
+    }
+
     const removed = serverListings.splice(idx, 1)[0];
-    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'LISTING_REMOVED', `Listing ${removed.title} removed by admin.`);
+    serverAccountService.recordAuditLog(adminId || 'admin', userRole, 'LISTING_DELETED', `Listing ${removed.title} removed by ${userRole}.`);
+    
     res.json({ success: true, listings: serverListings });
   });
 
