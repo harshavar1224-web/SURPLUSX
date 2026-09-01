@@ -902,3 +902,14 @@ export interface SupportTicket {
   updatedAt: string;
 }
 
+export function isAdminRole(role?: string | null): boolean {
+  if (!role) return false;
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
+}
+
+export function isSuperAdmin(role?: string | null): boolean {
+  if (!role) return false;
+  return role === 'SUPER_ADMIN';
+}
+
+

@@ -15,7 +15,6 @@ import { CartAndCheckoutModal } from './components/consumer/CartAndCheckoutModal
 import { ReceiptModal } from './components/consumer/ReceiptModal';
 import { BusinessDashboard } from './components/business/BusinessDashboard';
 import { NgoDashboard } from './components/ngo/NgoDashboard';
-import { AdminDashboard } from './components/admin/AdminDashboard';
 import { RetailerDashboard } from './components/retailer/RetailerDashboard';
 import { RiderDashboard } from './components/rider/RiderDashboard';
 import { MessagesView } from './components/common/MessagesView';
@@ -30,6 +29,28 @@ import { AccessDenied } from './components/auth/AccessDenied';
 import { LocationSelectModal } from './components/location/LocationSelectModal';
 import { SurplusXLogo } from './components/SurplusXLogo';
 import { Leaf, Menu } from 'lucide-react';
+import { isAdminRole } from './types';
+import { AdminHeader } from './components/admin/AdminHeader';
+import { AdminOverview } from './components/admin/AdminOverview';
+import { AdminImpactView } from './components/admin/AdminImpactView';
+import { AdminUsersView } from './components/admin/AdminUsersView';
+import { AdminBusinessesView } from './components/admin/AdminBusinessesView';
+import { AdminNgosView } from './components/admin/AdminNgosView';
+import { AdminListingsView } from './components/admin/AdminListingsView';
+import { AdminOrdersView } from './components/admin/AdminOrdersView';
+import { AdminDonationsView } from './components/admin/AdminDonationsView';
+import { AdminReservationsView } from './components/admin/AdminReservationsView';
+import { AdminPaymentsView } from './components/admin/AdminPaymentsView';
+import { AdminSettlementsView } from './components/admin/AdminSettlementsView';
+import { AdminLiveLogisticsView } from './components/admin/AdminLiveLogisticsView';
+import { AdminLiveMapView } from './components/admin/AdminLiveMapView';
+import { AdminAnalyticsView } from './components/admin/AdminAnalyticsView';
+import { AdminVerificationView } from './components/admin/AdminVerificationView';
+import { AdminReportsFraudView } from './components/admin/AdminReportsFraudView';
+import { AdminAuditLogsView } from './components/admin/AdminAuditLogsView';
+import { AdminSettingsView } from './components/admin/AdminSettingsView';
+import { AdminAdministratorsView } from './components/admin/AdminAdministratorsView';
+import { LocationSettingsTab } from './components/admin/LocationSettingsTab';
 
 const MainContent: React.FC = () => {
   const {
@@ -86,7 +107,7 @@ const MainContent: React.FC = () => {
   if (!canAccessView(activeView)) {
     return (
       <div className="min-h-screen bg-slate-50/70 text-slate-900 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
-        <Navbar />
+        {isAdminRole(currentUser.role) ? <AdminHeader /> : <Navbar />}
         <div className="flex-1 flex">
           <AppSidebar />
           <main className="flex-1 p-6 md:p-8">
@@ -106,7 +127,7 @@ const MainContent: React.FC = () => {
   const renderCurrentView = () => {
     // Universal Common Views across roles
     if (activeView === 'messages') return <MessagesView />;
-    if (activeView === 'impact') return <RoleImpactView />;
+    if (activeView === 'impact' && !isAdminRole(currentUser.role)) return <RoleImpactView />;
     if (activeView === 'profile') return <ProfileView />;
     if (activeView === 'settings') return <SettingsView />;
     if (activeView === 'notifications') return <NotificationsView />;
@@ -117,7 +138,7 @@ const MainContent: React.FC = () => {
     if (activeView === 'map' || activeView === 'live-map') return <InteractiveMapView />;
 
     // Role Specific Views
-    if (currentUser.role === 'ADMIN') {
+    if (isAdminRole(currentUser.role)) {
       if (previewRole) {
         const renderPreviewComponent = () => {
           if (previewRole === 'CONSUMER') {
@@ -128,7 +149,7 @@ const MainContent: React.FC = () => {
           }
           if (previewRole === 'BUSINESS') return <BusinessDashboard />;
           if (previewRole === 'NGO') return <NgoDashboard />;
-          return <AdminDashboard />;
+          return <AdminOverview />;
         };
 
         return (
@@ -137,7 +158,7 @@ const MainContent: React.FC = () => {
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span>
                 <span>
-                  <strong>ADMIN PREVIEW MODE:</strong> Viewing interface as <strong>{previewRole}</strong>. Actual database role remains <strong>ADMIN</strong>.
+                  <strong>ADMIN PREVIEW MODE:</strong> Viewing interface as <strong>{previewRole}</strong>. Actual database role remains <strong>{currentUser.role}</strong>.
                 </span>
               </div>
               <button
@@ -151,7 +172,58 @@ const MainContent: React.FC = () => {
           </div>
         );
       }
-      return <AdminDashboard />;
+
+      switch (activeView) {
+        case 'dashboard':
+          return <AdminOverview />;
+        case 'impact':
+          return <AdminImpactView />;
+        case 'users':
+          return <AdminUsersView />;
+        case 'businesses':
+          return <AdminBusinessesView />;
+        case 'ngos':
+          return <AdminNgosView />;
+        case 'listings':
+          return <AdminListingsView />;
+        case 'orders':
+          return <AdminOrdersView />;
+        case 'donations':
+          return <AdminDonationsView />;
+        case 'reservations':
+          return <AdminReservationsView />;
+        case 'payments':
+          return <AdminPaymentsView />;
+        case 'settlements':
+          return <AdminSettlementsView />;
+        case 'live-logistics':
+          return <AdminLiveLogisticsView />;
+        case 'live-map':
+        case 'map':
+          return <AdminLiveMapView />;
+        case 'analytics':
+          return <AdminAnalyticsView />;
+        case 'verification':
+          return <AdminVerificationView />;
+        case 'location-settings':
+          return <LocationSettingsTab />;
+        case 'reports':
+          return <AdminReportsFraudView />;
+        case 'audit-logs':
+          return <AdminAuditLogsView />;
+        case 'system-settings':
+          return <AdminSettingsView />;
+        case 'administrators':
+          return <AdminAdministratorsView />;
+        case 'messages':
+          return <MessagesView />;
+        case 'profile':
+          return <ProfileView />;
+        case 'notifications':
+          return <NotificationsView />;
+        default:
+          return <AdminOverview />;
+      }
     }
 
     if (currentUser.role === 'BUSINESS') {
@@ -190,8 +262,8 @@ const MainContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/70 text-slate-900 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
-      <Navbar />
+    <div className="min-h-screen bg-slate-50/70 text-slate-900 flex flex-col antialiased selection:bg-purple-500 selection:text-white">
+      {isAdminRole(currentUser.role) ? <AdminHeader /> : <Navbar />}
 
       <div className="flex-1 flex flex-row w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 gap-6 items-start">
         {/* Authoritative Role-Aware AppSidebar */}

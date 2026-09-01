@@ -17,7 +17,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { ConversationThread, UserRole } from '../../types';
+import { ConversationThread, UserRole, isAdminRole } from '../../types';
 
 export const MessagesView: React.FC = () => {
   const {
@@ -40,7 +40,7 @@ export const MessagesView: React.FC = () => {
   // Filter threads for current user (or all if admin)
   const userThreads = threads.filter(
     (t) =>
-      currentUser?.role === 'ADMIN' ||
+      isAdminRole(currentUser?.role) ||
       t.participantIds.includes(currentUser?.id || 'user-consumer-1')
   );
 
@@ -103,6 +103,7 @@ export const MessagesView: React.FC = () => {
       case 'NGO':
         return <HeartHandshake className="w-3.5 h-3.5 text-amber-600" />;
       case 'ADMIN':
+      case 'SUPER_ADMIN':
         return <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />;
       default:
         return <User className="w-3.5 h-3.5 text-slate-500" />;

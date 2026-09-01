@@ -23,7 +23,8 @@ export const AccessDenied: React.FC<AccessDeniedProps> = ({ attemptedView, requi
       case 'NGO':
         return 'NGO Partner';
       case 'ADMIN':
-        return 'Administrator';
+      case 'SUPER_ADMIN':
+        return role === 'SUPER_ADMIN' ? 'Super Administrator' : 'Administrator';
       case 'RIDER':
         return 'Rider';
       case 'RETAILER':

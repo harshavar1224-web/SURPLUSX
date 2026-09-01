@@ -77,7 +77,11 @@ export const AppSidebar: React.FC = () => {
       case 'NGO':
         return { label: 'NGO Partner', color: 'bg-amber-100/80 text-amber-800 border-amber-300/60' };
       case 'ADMIN':
-        return { label: 'Platform Admin', color: 'bg-purple-100/80 text-purple-800 border-purple-300/60' };
+      case 'SUPER_ADMIN':
+        return { 
+          label: role === 'SUPER_ADMIN' ? 'Platform Super Admin' : 'Platform Admin', 
+          color: 'bg-purple-100/80 text-purple-800 border-purple-300/60' 
+        };
       default:
         return { label: 'Guest Explorer', color: 'bg-slate-100 text-slate-700 border-slate-300' };
     }

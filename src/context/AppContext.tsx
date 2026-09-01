@@ -29,6 +29,7 @@ import {
   ConversationThread,
   SupportTicket,
   AdminRoleChangeLog,
+  isAdminRole,
 } from '../types';
 import {
   signupApi,
@@ -314,6 +315,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       joinedDate: 'December 2023',
       avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
     },
+    SUPER_ADMIN: {
+      id: 'user-super-admin-1',
+      name: 'SurplusX Platform Super Admin',
+      email: 'surplus.support@gmail.com',
+      phone: '+91 99999 00000',
+      role: 'SUPER_ADMIN',
+      city: 'Bangalore HQ',
+      isVerified: true,
+      joinedDate: 'November 2023',
+      avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80',
+    },
     RETAILER: {
       id: 'user-retailer-1',
       name: 'Metro Mart Supermarkets',
@@ -344,7 +356,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
 
   const setAdminPreviewRole = (role: UserRole | null) => {
-    if (!currentUser || currentUser.role !== 'ADMIN') return;
+    if (!currentUser || !isAdminRole(currentUser.role)) return;
     setPreviewRole(role);
     if (role) {
       addAuditLog(`ADMIN_VIEW_AS_${role}`, 'AUTH', `Admin ${currentUser.email} initiated View As preview for role: ${role}`);
@@ -946,7 +958,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!currentUser) return false;
 
     // Admin has supervisory access across all views
-    if (currentUser.role === 'ADMIN') return true;
+    if (isAdminRole(currentUser.role)) {
+      if (view === 'administrators' && currentUser.role !== 'SUPER_ADMIN') {
+        return false;
+      }
+      return true;
+    }
 
     // Role-specific view boundaries
     switch (currentUser.role) {
@@ -1064,7 +1081,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // Default view routing based on role
-    setActiveView(user.role === 'ADMIN' ? 'admin' : 'dashboard');
+    setActiveView(isAdminRole(user.role) ? 'admin' : 'dashboard');
   };
 
   // Authoritative Login (SERVER DETERMINES ROLE - NO ROLE SELECTOR ON LOGIN)
@@ -1137,7 +1154,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     emailVerificationToken?: string,
     phoneVerificationToken?: string
   ): Promise<{ success: boolean; user?: User; error?: string }> => {
-    if ((role as string) === 'ADMIN') {
+    if (isAdminRole(role)) {
       const err = 'Administrator accounts cannot be created via public signup.';
       triggerToast(err, 'warning');
       return { success: false, error: err };
@@ -1181,7 +1198,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     newRole: UserRole,
     reason: string
   ): Promise<{ success: boolean; error?: string }> => {
-    if (currentUser?.role !== 'ADMIN') {
+    if (!isAdminRole(currentUser?.role)) {
       const err = 'Unauthorized: Administrative credentials required to change user roles.';
       triggerToast(err, 'warning');
       return { success: false, error: err };

@@ -20,7 +20,7 @@ import { phoneVerificationService } from './src/server/phoneVerificationService'
 import { emailVerificationService } from './src/server/emailVerificationService';
 import { emailService } from './src/server/emailService';
 import { INITIAL_LISTINGS } from './src/data/mockData';
-import { UserRole, LocationRadiusPolicyType, LocalityType, DeliveryTracking, DeliveryEvent, DeliveryLocation } from './src/types';
+import { UserRole, LocationRadiusPolicyType, LocalityType, DeliveryTracking, DeliveryEvent, DeliveryLocation, isAdminRole } from './src/types';
 
 dotenv.config();
 
@@ -969,7 +969,7 @@ async function startServer() {
   app.get('/api/admin/location-policy', (req, res) => {
     const userRole = (req.headers['x-user-role'] as UserRole) || 'ADMIN';
 
-    if (userRole !== 'ADMIN') {
+    if (!isAdminRole(userRole)) {
       return res.status(403).json({
         success: false,
         error: '403 Forbidden: Only authorized Platform Host/Admin users can access location policy management.',
@@ -992,7 +992,7 @@ async function startServer() {
     const userRole = (req.headers['x-user-role'] as UserRole) || req.body.adminRole;
 
     // Strict Role Authorization Enforcement (Requirement #8 & #43)
-    if (userRole !== 'ADMIN') {
+    if (!isAdminRole(userRole)) {
       return res.status(403).json({
         success: false,
         error: '403 Forbidden: Permission denied. Normal consumers, merchants, and NGOs cannot modify platform discovery radii.',
@@ -1033,7 +1033,7 @@ async function startServer() {
   app.get('/api/admin/location-policy/history', (req, res) => {
     const userRole = (req.headers['x-user-role'] as UserRole) || 'ADMIN';
 
-    if (userRole !== 'ADMIN') {
+    if (!isAdminRole(userRole)) {
       return res.status(403).json({
         success: false,
         error: '403 Forbidden: Only platform administrators can view audit histories.',
@@ -1548,7 +1548,7 @@ async function startServer() {
     const normEmail = normalizeEmail(email);
     const user = serverAccountService.findUserByEmail(normEmail);
 
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || !isAdminRole(user.role)) {
       serverAccountService.recordAuditLog(
         'system-admin',
         'ADMIN',
@@ -1561,7 +1561,7 @@ async function startServer() {
     }
 
     const result = serverAccountService.authenticateUser(normEmail, password, 'admin-console', clientIp);
-    if (!result.success || result.user?.role !== 'ADMIN') {
+    if (!result.success || !isAdminRole(result.user?.role)) {
       return res.status(401).json({ success: false, error: 'Invalid admin credentials.' });
     }
 
@@ -1655,7 +1655,7 @@ async function startServer() {
     }
 
     const admin = serverAccountService.findUserById(adminId);
-    if (!admin || (admin.role !== 'ADMIN' && admin.role !== 'SUPER_ADMIN')) {
+    if (!admin || !isAdminRole(admin.role)) {
       return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
     }
 
@@ -1743,6 +1743,36 @@ async function startServer() {
     });
   });
 
+  // PATCH /api/admin/users/:id/status - Update user status (Active / Suspended)
+  app.patch('/api/admin/users/:id/status', (req, res) => {
+    const { id: targetUserId } = req.params;
+    const { status, adminId, reason } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+
+    const admin = serverAccountService.findUserById(adminId);
+    if (!admin || !isAdminRole(admin.role)) {
+      return res.status(403).json({ success: false, error: 'You do not have permission to perform this action.' });
+    }
+
+    const targetUser = serverAccountService.findUserById(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    }
+
+    targetUser.isBlocked = status === 'SUSPENDED';
+    targetUser.updatedAt = new Date().toISOString();
+
+    serverAccountService.recordAuditLog(
+      adminId,
+      admin.role,
+      status === 'SUSPENDED' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
+      `Admin updated user ${targetUserId} status to ${status}. Reason: ${reason || 'Administrative governance'}.`,
+      clientIp
+    );
+
+    res.json({ success: true, user: targetUser });
+  });
+
   // DELETE /api/admin/users/:id - Delete a user (Admin only)
   app.delete('/api/admin/users/:id', (req, res) => {
     const { id: targetUserId } = req.params;
@@ -1759,6 +1789,204 @@ async function startServer() {
       return res.status(400).json(result);
     }
 
+    res.json(result);
+  });
+
+  // Businesses Admin Endpoints
+  let serverBusinessesStore = [
+    { id: 'store-1', name: 'Green Basket Store', category: 'Fruits & Vegetables', address: 'Koramangala, Bangalore', rating: 4.8, status: 'VERIFIED', fssaiNumber: '12345678901234' },
+    { id: 'store-2', name: 'Bake House', category: 'Bakery', address: 'Indiranagar, Bangalore', rating: 4.9, status: 'VERIFIED', fssaiNumber: '98765432109876' },
+    { id: 'store-3', name: 'Spice Kitchen', category: 'Cooked Meals', address: 'HSR Layout, Bangalore', rating: 4.7, status: 'VERIFIED', fssaiNumber: '45678912345678' }
+  ];
+
+  app.get('/api/admin/businesses', (req, res) => {
+    res.json({ success: true, businesses: serverBusinessesStore });
+  });
+
+  app.patch('/api/admin/businesses/:id/status', (req, res) => {
+    const { id } = req.params;
+    const { status, reason, adminId } = req.body;
+    const biz = serverBusinessesStore.find(b => b.id === id);
+    if (!biz) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    biz.status = status;
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', status === 'VERIFIED' ? 'BUSINESS_APPROVED' : 'BUSINESS_SUSPENDED', `Business ${biz.name} status updated to ${status}. Reason: ${reason || 'N/A'}`);
+    res.json({ success: true, business: biz, businesses: serverBusinessesStore });
+  });
+
+  app.delete('/api/admin/businesses/:id', (req, res) => {
+    const { id } = req.params;
+    const { adminId } = req.body;
+    const idx = serverBusinessesStore.findIndex(b => b.id === id);
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    const removed = serverBusinessesStore.splice(idx, 1)[0];
+    // Also cleanup listings
+    serverListingsAdmin = serverListingsAdmin.filter(l => l.storeId !== id);
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'BUSINESS_APPROVED', `Business ${removed.name} deleted permanently.`);
+    res.json({ success: true, businesses: serverBusinessesStore });
+  });
+
+  // NGOs Admin Endpoints
+  let serverNgosStore = [
+    { id: 'ngo-1', name: 'Akshaya Patra Foundation', contactPerson: 'Ramesh Kumar', email: 'contact@akshayapatra.org', phone: '+919876512345', city: 'Bangalore', status: 'VERIFIED', activeDeliveriesCount: 2 },
+    { id: 'ngo-2', name: 'Robin Hood Army Bangalore', contactPerson: 'Priya Sharma', email: 'blr@robinhoodarmy.com', phone: '+919812345678', city: 'Bangalore', status: 'VERIFIED', activeDeliveriesCount: 1 }
+  ];
+
+  app.get('/api/admin/ngos', (req, res) => {
+    res.json({ success: true, ngos: serverNgosStore });
+  });
+
+  app.patch('/api/admin/ngos/:id/status', (req, res) => {
+    const { id } = req.params;
+    const { status, reason, adminId } = req.body;
+    const ngo = serverNgosStore.find(n => n.id === id);
+    if (!ngo) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    ngo.status = status;
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', status === 'VERIFIED' ? 'NGO_APPROVED' : 'NGO_REJECTED', `NGO ${ngo.name} status updated to ${status}.`);
+    res.json({ success: true, ngo, ngos: serverNgosStore });
+  });
+
+  app.delete('/api/admin/ngos/:id', (req, res) => {
+    const { id } = req.params;
+    const { adminId } = req.body;
+    const idx = serverNgosStore.findIndex(n => n.id === id);
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    const removed = serverNgosStore.splice(idx, 1)[0];
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'NGO_APPROVED', `NGO ${removed.name} deleted permanently.`);
+    res.json({ success: true, ngos: serverNgosStore });
+  });
+
+  // Listings Admin Endpoints
+  app.get('/api/admin/listings', (req, res) => {
+    res.json({ success: true, listings: serverListings });
+  });
+
+  app.patch('/api/admin/listings/:id/status', (req, res) => {
+    const { id } = req.params;
+    const { status, adminId, reason } = req.body;
+    const listing = serverListings.find(l => l.id === id);
+    if (!listing) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    listing.status = status;
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', status === 'SUSPENDED' ? 'LISTING_SUSPENDED' : 'LISTING_RESTORED', `Listing ${id} status updated to ${status}. Reason: ${reason || 'N/A'}`);
+    res.json({ success: true, listing, listings: serverListings });
+  });
+
+  app.delete('/api/admin/listings/:id', (req, res) => {
+    const { id } = req.params;
+    const { adminId } = req.body;
+    const idx = serverListings.findIndex(l => l.id === id);
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    const removed = serverListings.splice(idx, 1)[0];
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'LISTING_REMOVED', `Listing ${removed.title} removed by admin.`);
+    res.json({ success: true, listings: serverListings });
+  });
+
+  // Orders Admin Endpoints
+  app.get('/api/admin/orders', (req, res) => {
+    res.json({ success: true, orders: INITIAL_ORDERS });
+  });
+
+  app.patch('/api/admin/orders/:id/status', (req, res) => {
+    const { id } = req.params;
+    const { status, adminId, reason } = req.body;
+    const order = INITIAL_ORDERS.find(o => o.id === id);
+    if (!order) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    order.status = status;
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'ORDER_OVERRIDE', `Order ${id} status overridden to ${status}. Reason: ${reason || 'Admin action'}`);
+    res.json({ success: true, order, orders: INITIAL_ORDERS });
+  });
+
+  app.delete('/api/admin/orders/:id', (req, res) => {
+    const { id } = req.params;
+    const idx = INITIAL_ORDERS.findIndex(o => o.id === id);
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    INITIAL_ORDERS.splice(idx, 1);
+    res.json({ success: true, orders: INITIAL_ORDERS });
+  });
+
+  // Verifications Admin Endpoints
+  let serverVerificationsStore = [
+    { id: 'ver-1', entityName: 'Green Basket Store', entityType: 'BUSINESS', submittedAt: '2026-08-20T10:00:00Z', status: 'PENDING', documentUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&w=800&q=80', fssaiNumber: '12345678901234' },
+    { id: 'ver-2', entityName: 'Hope Kitchen NGO', entityType: 'NGO', submittedAt: '2026-08-22T14:30:00Z', status: 'PENDING', documentUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?auto=format&fit=crop&w=800&q=80', fssaiNumber: '98765432109876' }
+  ];
+
+  app.get('/api/admin/verifications', (req, res) => {
+    res.json({ success: true, verifications: serverVerificationsStore });
+  });
+
+  app.patch('/api/admin/verifications/:id/status', (req, res) => {
+    const { id } = req.params;
+    const { status, reason, adminId } = req.body;
+    const ver = serverVerificationsStore.find(v => v.id === id);
+    if (!ver) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    ver.status = status;
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'VERIFICATION_ACTION', `Verification ${id} status set to ${status}. Reason: ${reason || 'N/A'}`);
+    res.json({ success: true, verification: ver, verifications: serverVerificationsStore });
+  });
+
+  // Reports & Fraud Admin Endpoints
+  let serverReportsStore = [
+    { id: 'rep-1', reporter: 'Consumer #104', targetType: 'LISTING', targetId: 'listing-2', reason: 'Incorrect pickup time reported', status: 'OPEN', createdAt: '2026-08-30T11:00:00Z' },
+    { id: 'rep-2', reporter: 'Business #201', targetType: 'USER', targetId: 'user-99', reason: 'Suspicious reservation spam', status: 'INVESTIGATING', createdAt: '2026-08-29T16:20:00Z' }
+  ];
+
+  app.get('/api/admin/reports', (req, res) => {
+    res.json({ success: true, reports: serverReportsStore });
+  });
+
+  app.patch('/api/admin/reports/:id/status', (req, res) => {
+    const { id } = req.params;
+    const { status, adminId } = req.body;
+    const rep = serverReportsStore.find(r => r.id === id);
+    if (!rep) return res.status(404).json({ success: false, error: 'Record no longer exists.' });
+    rep.status = status;
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'REPORT_ACTION', `Report ${id} status updated to ${status}.`);
+    res.json({ success: true, report: rep, reports: serverReportsStore });
+  });
+
+  // System Settings Endpoints
+  let serverSystemSettingsStore = {
+    platformName: 'SurplusX Zero-Waste Food Redistribution',
+    maintenanceMode: false,
+    autoApprovalEnabled: false,
+    maxListingExpiryHours: 24,
+    platformFeePercent: 2.5,
+    defaultSearchRadiusKm: 10,
+    smsNotificationsEnabled: true,
+    emailAlertsEnabled: true
+  };
+
+  app.get('/api/admin/settings', (req, res) => {
+    res.json({ success: true, settings: serverSystemSettingsStore });
+  });
+
+  app.post('/api/admin/settings', (req, res) => {
+    const { settings, adminId } = req.body;
+    serverSystemSettingsStore = { ...serverSystemSettingsStore, ...settings };
+    serverAccountService.recordAuditLog(adminId || 'admin', 'ADMIN', 'SETTING_CHANGED', `System settings updated by admin.`);
+    res.json({ success: true, settings: serverSystemSettingsStore });
+  });
+
+  // Create Administrator Endpoint
+  app.post('/api/admin/administrators', async (req, res) => {
+    const { name, email, phone, password, adminId } = req.body;
+    const admin = serverAccountService.findUserById(adminId);
+    if (!admin || admin.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Super Admin privileges required.' });
+    }
+    const result = await serverAccountService.signup({
+      name,
+      email,
+      phone,
+      role: 'ADMIN',
+      password,
+      city: 'Bangalore HQ',
+      ipAddress: '127.0.0.1',
+      deviceId: 'super-admin-created'
+    });
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    serverAccountService.recordAuditLog(adminId, 'SUPER_ADMIN', 'ADMIN_CREATED', `Super Admin created new Administrator account for ${email}.`);
     res.json(result);
   });
 

@@ -8,6 +8,7 @@ import {
   OrderEligibilityResult,
   LocationClassification,
   UserRole,
+  isAdminRole,
 } from '../types';
 
 // ============================================================================
@@ -988,7 +989,7 @@ class ServerLocationPolicyStore {
     const { policyType, localityType, newRadiusKm, updatedBy, adminRole, reason } = params;
 
     // Strict Backend Security Check: Only Host/Admin (Specification #13)
-    if (adminRole !== 'ADMIN') {
+    if (!isAdminRole(adminRole)) {
       return {
         success: false,
         error: '403 Forbidden: Only authorized Platform Host/Admin accounts have permissions to modify location discovery and logistics radius policies.',

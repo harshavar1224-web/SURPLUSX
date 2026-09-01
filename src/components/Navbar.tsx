@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SurplusXLogo } from './SurplusXLogo';
-import { UserRole } from '../types';
+import { UserRole, isAdminRole } from '../types';
 
 interface NavbarProps {
   onOpenMobileFrame?: () => void;
@@ -86,7 +86,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
       case 'RIDER':
         return { label: 'Rider Partner', color: 'bg-teal-50 text-teal-700 border-teal-200', icon: Bike };
       case 'ADMIN':
-        return { label: 'Admin Command', color: 'bg-purple-50 text-purple-700 border-purple-200', icon: ShieldAlert };
+      case 'SUPER_ADMIN':
+        return { 
+          label: role === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin Command', 
+          color: 'bg-purple-50 text-purple-700 border-purple-200', 
+          icon: ShieldAlert 
+        };
     }
   };
 
@@ -270,6 +275,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
         );
 
       case 'ADMIN':
+      case 'SUPER_ADMIN':
         return (
           <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-slate-600">
             <button
@@ -591,7 +597,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileFrame }) => {
                         </>
                       )}
 
-                      {currentUser.role === 'ADMIN' && (
+                      {isAdminRole(currentUser.role) && (
                         <>
                           <button
                             onClick={() => {

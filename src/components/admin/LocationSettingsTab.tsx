@@ -19,7 +19,7 @@ import {
   Info,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { LocationRadiusPolicy, LocationRadiusPolicyType, LocalityType } from '../../types';
+import { LocationRadiusPolicy, LocationRadiusPolicyType, LocalityType, isAdminRole } from '../../types';
 
 export const LocationSettingsTab: React.FC = () => {
   const {
@@ -41,7 +41,7 @@ export const LocationSettingsTab: React.FC = () => {
     allowed: boolean;
   } | null>(null);
 
-  const isAdmin = currentUser?.role === 'ADMIN';
+  const isAdmin = isAdminRole(currentUser?.role);
 
   if (!isAdmin) {
     return (

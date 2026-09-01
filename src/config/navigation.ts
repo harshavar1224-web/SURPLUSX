@@ -143,6 +143,11 @@ export const getNavConfigForRole = (role?: UserRole): NavItemConfig[] => {
       return NGO_NAV;
     case 'ADMIN':
       return ADMIN_NAV;
+    case 'SUPER_ADMIN':
+      return [
+        ...ADMIN_NAV,
+        { id: 'a-administrators', label: 'Administrators', icon: Users2, view: 'administrators', category: 'SYSTEM' },
+      ];
     case 'RETAILER':
     case 'RIDER':
       return [

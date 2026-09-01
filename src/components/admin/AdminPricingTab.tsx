@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { FinancialPricingConfigBundle, DoubleEntryLedgerRecord, NGOSettlement, FinancialAuditLog } from '../../types/financial';
+import { isAdminRole } from '../../types';
 
 export const AdminPricingTab: React.FC = () => {
   const { currentUser, triggerToast } = useApp();
@@ -76,7 +77,7 @@ export const AdminPricingTab: React.FC = () => {
 
   const handleSaveConfiguration = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser || currentUser.role !== 'ADMIN') {
+    if (!currentUser || !isAdminRole(currentUser.role)) {
       triggerToast('Administrator privileges required to update pricing rules.', 'error');
       return;
     }

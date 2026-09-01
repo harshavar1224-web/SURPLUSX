@@ -51,7 +51,11 @@ export const ProfileView: React.FC = () => {
       case 'NGO':
         return { label: 'NGO Partner', color: 'bg-amber-100 text-amber-800 border-amber-300' };
       case 'ADMIN':
-        return { label: 'Platform Administrator', color: 'bg-purple-100 text-purple-800 border-purple-300' };
+      case 'SUPER_ADMIN':
+        return { 
+          label: role === 'SUPER_ADMIN' ? 'Platform Super Administrator' : 'Platform Administrator', 
+          color: 'bg-purple-100 text-purple-800 border-purple-300' 
+        };
       default:
         return { label: 'Guest Explorer', color: 'bg-slate-100 text-slate-800 border-slate-300' };
     }

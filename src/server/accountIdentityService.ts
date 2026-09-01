@@ -23,6 +23,7 @@ import {
   PhoneIntelligence,
   PhoneVerificationStatus,
   EmailVerificationStatus,
+  isAdminRole,
 } from '../types';
 import { phoneVerificationService } from './phoneVerificationService';
 import { emailVerificationService } from './emailVerificationService';
@@ -1131,7 +1132,7 @@ class AccountIdentityDatabase {
     const unlock = await this.mutex.lock();
     try {
       const admin = this.findUserById(params.adminId);
-      if (!admin || admin.role !== 'ADMIN') {
+      if (!admin || !isAdminRole(admin.role)) {
         return { success: false, error: 'Unauthorized: Only platform administrators can override phone verifications.' };
       }
 
@@ -1277,7 +1278,7 @@ class AccountIdentityDatabase {
     const unlock = await this.mutex.lock();
     try {
       const admin = this.findUserById(params.adminId);
-      if (!admin || admin.role !== 'ADMIN') {
+      if (!admin || !isAdminRole(admin.role)) {
         return {
           success: false,
           error: 'Unauthorized: Administrative credentials and account:role:update authorization required.',
