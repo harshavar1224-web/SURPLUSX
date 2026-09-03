@@ -54,7 +54,7 @@ export function validateGpsAnomaly(
   newRecordedAt: string,
   maxSpeedKmH: number = 130
 ): { isAnomaly: boolean; calculatedSpeedKmH: number; details?: string } {
-  if (!prevLocation) {
+  if (!prevLocation || typeof prevLocation.lat !== 'number' || typeof prevLocation.lng !== 'number') {
     return { isAnomaly: false, calculatedSpeedKmH: 0 };
   }
 

@@ -1352,7 +1352,7 @@ async function startServer() {
   app.get('/api/internal/exotel-status', (req, res) => {
     res.json({
       success: true,
-      provider: 'EXOTEL_VOICE_OTP',
+      provider: 'EXOTEL_SMS_OTP',
       isConfigured: phoneVerificationService.isConfigured(),
       config: phoneVerificationService.getConfigurationStatus(),
     });
@@ -1371,13 +1371,13 @@ async function startServer() {
     });
   });
 
-  // Helper for sending Exotel Voice OTP
+  // Helper for sending Exotel SMS OTP
   const handleSendMobileOtp = async (req: any, res: any) => {
     const { phone, purpose = 'SIGNUP', deviceId } = req.body;
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
 
     if (!phone) {
-      return res.status(400).json({ success: false, error: 'Mobile number is required to send verification call.' });
+      return res.status(400).json({ success: false, error: 'Mobile number is required to send verification SMS.' });
     }
 
     if (purpose === 'SIGNUP') {
@@ -1408,7 +1408,7 @@ async function startServer() {
 
     res.json({
       success: true,
-      message: 'OTP call initiated via Exotel',
+      message: 'OTP sent successfully via SMS',
       status: result.status,
       requestId: result.sessionId || result.requestId,
       sessionId: result.sessionId || result.requestId,
@@ -1419,7 +1419,7 @@ async function startServer() {
     });
   };
 
-  // Helper for verifying Exotel Voice OTP
+  // Helper for verifying Exotel SMS OTP
   const handleVerifyMobileOtp = async (req: any, res: any) => {
     const { sessionId, requestId, verificationSessionId, phone, otpCode, otp, purpose = 'SIGNUP' } = req.body;
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
@@ -1449,7 +1449,7 @@ async function startServer() {
     res.json(result);
   };
 
-  // 16. Exotel Mobile Voice OTP API Endpoints
+  // 16. Exotel Mobile SMS OTP API Endpoints
   app.post('/api/auth/mobile/send-otp', handleSendMobileOtp);
   app.post('/api/auth/mobile/resend-otp', handleSendMobileOtp);
   app.post('/api/auth/mobile/verify-otp', handleVerifyMobileOtp);

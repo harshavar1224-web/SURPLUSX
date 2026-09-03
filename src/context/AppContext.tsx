@@ -529,8 +529,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       distanceKm: calculateHaversineDistance(
         12.9716,
         77.5946,
-        item.coordinates.lat,
-        item.coordinates.lng
+        item.coordinates?.lat ?? 12.9716,
+        item.coordinates?.lng ?? 77.5946
       ).distanceKm,
     }));
   });
@@ -549,13 +549,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           // Re-calculate distances based on current user location or defaults
           const mappedListings = data.listings.map((l: any) => {
             try {
+              const itemLat = l.coordinates?.lat ?? l.latitude ?? 12.9716;
+              const itemLng = l.coordinates?.lng ?? l.longitude ?? 77.5946;
               return {
                 ...l,
                 distanceKm: calculateHaversineDistanceKm(
                   userLocation?.latitude || 12.9716,
                   userLocation?.longitude || 77.5946,
-                  l.coordinates.lat,
-                  l.coordinates.lng
+                  itemLat,
+                  itemLng
                 ),
               };
             } catch (err) {
@@ -1444,11 +1446,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateListingsWithDistance = (userLat: number, userLng: number) => {
     setListings((prev) =>
       prev.map((item) => {
+        const itemLat = item.coordinates?.lat ?? (item as any).latitude ?? 12.9716;
+        const itemLng = item.coordinates?.lng ?? (item as any).longitude ?? 77.5946;
         const dist = calculateHaversineDistanceKm(
           userLat,
           userLng,
-          item.coordinates.lat,
-          item.coordinates.lng
+          itemLat,
+          itemLng
         );
         return {
           ...item,
@@ -1897,6 +1901,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     clearCart();
 
     // Create live delivery tracking
+    const primaryStoreLat = primaryStore?.coordinates?.lat ?? (primaryStore as any)?.latitude ?? 12.9716;
+    const primaryStoreLng = primaryStore?.coordinates?.lng ?? (primaryStore as any)?.longitude ?? 77.5946;
+
     const newDelivery: DeliveryTracking = {
       id: `del-${Math.floor(100 + Math.random() * 900)}`,
       orderOrDonationId: orderId,
@@ -1905,8 +1912,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       driverPhone: '+91 97412 88401',
       vehicleType: 'E-Bike',
       currentLocation: {
-        lat: primaryStore.coordinates.lat,
-        lng: primaryStore.coordinates.lng,
+        lat: primaryStoreLat,
+        lng: primaryStoreLng,
         speed: 18,
         heading: 90,
         accuracy: 5,
@@ -1915,14 +1922,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       origin: {
         name: primaryStore.storeName,
         address: primaryStore.pickupAddress,
-        lat: primaryStore.coordinates.lat,
-        lng: primaryStore.coordinates.lng,
+        lat: primaryStoreLat,
+        lng: primaryStoreLng,
       },
       destination: {
         name: `${currentUser.name} (Delivery Destination)`,
         address: `${currentUser.city}`,
-        lat: primaryStore.coordinates.lat - 0.005,
-        lng: primaryStore.coordinates.lng - 0.004,
+        lat: primaryStoreLat - 0.005,
+        lng: primaryStoreLng - 0.004,
       },
       etaMinutes: 12,
       distanceKm: 1.8,
@@ -1943,8 +1950,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         {
           id: `loc-${Date.now()}`,
           deliveryId: `del-${Math.floor(100 + Math.random() * 900)}`,
-          latitude: primaryStore.coordinates.lat,
-          longitude: primaryStore.coordinates.lng,
+          latitude: primaryStoreLat,
+          longitude: primaryStoreLng,
           accuracy: 5,
           speed: 18,
           heading: 90,
@@ -1958,8 +1965,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           deliveryId: `del-${Math.floor(100 + Math.random() * 900)}`,
           eventType: 'ASSIGNED',
           actorId: 'system',
-          latitude: primaryStore.coordinates.lat,
-          longitude: primaryStore.coordinates.lng,
+          latitude: primaryStoreLat,
+          longitude: primaryStoreLng,
           timestamp: new Date().toISOString(),
         },
       ],
@@ -2058,8 +2065,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
 
           // Compute distances to pickup and drop
-          const pickupDist = calculateHaversineDistance(newLat, newLng, prev.origin.lat, prev.origin.lng);
-          const dropDist = calculateHaversineDistance(newLat, newLng, prev.destination.lat, prev.destination.lng);
+          const originLat = prev.origin?.lat ?? 12.9716;
+          const originLng = prev.origin?.lng ?? 77.5946;
+          const destLat = prev.destination?.lat ?? 12.9716;
+          const destLng = prev.destination?.lng ?? 77.5946;
+          const pickupDist = calculateHaversineDistance(newLat, newLng, originLat, originLng);
+          const dropDist = calculateHaversineDistance(newLat, newLng, destLat, destLng);
 
           const isAtPickup = pickupDist.distanceMeters <= prev.pickupGeofenceRadiusMeters;
           const isAtDrop = dropDist.distanceMeters <= prev.dropGeofenceRadiusMeters;
@@ -2137,8 +2148,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deliveryId,
         eventType: 'TRIP_STARTED',
         actorId: currentUser.id,
-        latitude: prev.currentLocation.lat,
-        longitude: prev.currentLocation.lng,
+        latitude: prev.currentLocation?.lat ?? 12.9716,
+        longitude: prev.currentLocation?.lng ?? 77.5946,
         timestamp: nowIso,
         metadata: { driverName: prev.driverName, status: 'EN_ROUTE_TO_PICKUP' },
       };
@@ -2162,8 +2173,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       deliveryId,
       eventType: 'ARRIVED_AT_PICKUP',
       actorId: currentUser.id,
-      latitude: activeDelivery.currentLocation.lat,
-      longitude: activeDelivery.currentLocation.lng,
+      latitude: activeDelivery.currentLocation?.lat ?? 12.9716,
+      longitude: activeDelivery.currentLocation?.lng ?? 77.5946,
       timestamp: nowIso,
       metadata: { geofenceRadius: activeDelivery.pickupGeofenceRadiusMeters, distance: activeDelivery.distanceToPickupMeters },
     };
@@ -2194,8 +2205,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deliveryId: activeDelivery.id,
         eventType: 'PICKUP_VERIFIED',
         actorId: currentUser.id,
-        latitude: activeDelivery.currentLocation.lat,
-        longitude: activeDelivery.currentLocation.lng,
+        latitude: activeDelivery.currentLocation?.lat ?? 12.9716,
+        longitude: activeDelivery.currentLocation?.lng ?? 77.5946,
         timestamp: nowIso,
         metadata: { verifiedOtp: otp },
       };
@@ -2204,8 +2215,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deliveryId: activeDelivery.id,
         eventType: 'FOOD_COLLECTED',
         actorId: currentUser.id,
-        latitude: activeDelivery.currentLocation.lat,
-        longitude: activeDelivery.currentLocation.lng,
+        latitude: activeDelivery.currentLocation?.lat ?? 12.9716,
+        longitude: activeDelivery.currentLocation?.lng ?? 77.5946,
         timestamp: nowIso,
       };
 
@@ -2240,8 +2251,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       deliveryId,
       eventType: 'DELIVERY_STARTED',
       actorId: currentUser.id,
-      latitude: activeDelivery.currentLocation.lat,
-      longitude: activeDelivery.currentLocation.lng,
+      latitude: activeDelivery.currentLocation?.lat ?? 12.9716,
+      longitude: activeDelivery.currentLocation?.lng ?? 77.5946,
       timestamp: nowIso,
     };
 
@@ -2267,8 +2278,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       deliveryId,
       eventType: 'ARRIVED_AT_DROP',
       actorId: currentUser.id,
-      latitude: activeDelivery.currentLocation.lat,
-      longitude: activeDelivery.currentLocation.lng,
+      latitude: activeDelivery.currentLocation?.lat ?? 12.9716,
+      longitude: activeDelivery.currentLocation?.lng ?? 77.5946,
       timestamp: nowIso,
       metadata: { distance: activeDelivery.distanceToDropMeters },
     };
@@ -2304,8 +2315,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deliveryId: activeDelivery.id,
         eventType: 'DELIVERY_VERIFIED',
         actorId: currentUser.id,
-        latitude: activeDelivery.currentLocation.lat,
-        longitude: activeDelivery.currentLocation.lng,
+        latitude: activeDelivery.currentLocation?.lat ?? 12.9716,
+        longitude: activeDelivery.currentLocation?.lng ?? 77.5946,
         timestamp: nowIso,
         metadata: { verifiedOtp: otp },
       };
@@ -2314,8 +2325,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deliveryId: activeDelivery.id,
         eventType: 'COMPLETED',
         actorId: currentUser.id,
-        latitude: activeDelivery.currentLocation.lat,
-        longitude: activeDelivery.currentLocation.lng,
+        latitude: activeDelivery.currentLocation?.lat ?? 12.9716,
+        longitude: activeDelivery.currentLocation?.lng ?? 77.5946,
         timestamp: nowIso,
       };
 
@@ -2372,11 +2383,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setActiveDelivery((prev) => {
       if (!prev) return null;
       const targetCoord = target === 'PICKUP' ? prev.origin : prev.destination;
-      const nextLat = prev.currentLocation.lat + (targetCoord.lat - prev.currentLocation.lat) * 0.45;
-      const nextLng = prev.currentLocation.lng + (targetCoord.lng - prev.currentLocation.lng) * 0.45;
+      const targetLat = targetCoord?.lat ?? 12.9716;
+      const targetLng = targetCoord?.lng ?? 77.5946;
+      const currLat = prev.currentLocation?.lat ?? 12.9716;
+      const currLng = prev.currentLocation?.lng ?? 77.5946;
+      const originLat = prev.origin?.lat ?? 12.9716;
+      const originLng = prev.origin?.lng ?? 77.5946;
+      const destLat = prev.destination?.lat ?? 12.9716;
+      const destLng = prev.destination?.lng ?? 77.5946;
 
-      const pDist = calculateHaversineDistance(nextLat, nextLng, prev.origin.lat, prev.origin.lng);
-      const dDist = calculateHaversineDistance(nextLat, nextLng, prev.destination.lat, prev.destination.lng);
+      const nextLat = currLat + (targetLat - currLat) * 0.45;
+      const nextLng = currLng + (targetLng - currLng) * 0.45;
+
+      const pDist = calculateHaversineDistance(nextLat, nextLng, originLat, originLng);
+      const dDist = calculateHaversineDistance(nextLat, nextLng, destLat, destLng);
 
       const targetDistKm = target === 'PICKUP' ? pDist.distanceKm : dDist.distanceKm;
       const dynamicEta = calculateEtaMinutes(targetDistKm, 24);

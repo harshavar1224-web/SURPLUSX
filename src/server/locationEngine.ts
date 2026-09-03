@@ -1563,8 +1563,13 @@ export function verifyServerOrderDistanceEligibility(params: {
     policyType = 'DISCOVERY_RADIUS',
   } = params;
 
+  const userLat = userCoordinates?.lat ?? (userCoordinates as any)?.latitude ?? 12.9716;
+  const userLng = userCoordinates?.lng ?? (userCoordinates as any)?.longitude ?? 77.5946;
+  const listingLat = listingCoordinates?.lat ?? (listingCoordinates as any)?.latitude ?? 12.9716;
+  const listingLng = listingCoordinates?.lng ?? (listingCoordinates as any)?.longitude ?? 77.5946;
+
   // 1. Boundary check: must be within India
-  if (!isWithinIndia(userCoordinates.lat, userCoordinates.lng)) {
+  if (!isWithinIndia(userLat, userLng)) {
     return {
       allowed: false,
       userDistanceKm: 0,
@@ -1577,17 +1582,17 @@ export function verifyServerOrderDistanceEligibility(params: {
   }
 
   // 2. Authoritative server classification
-  const classification = classifyServerLocality(userCoordinates.lat, userCoordinates.lng);
+  const classification = classifyServerLocality(userLat, userLng);
 
   // 3. Load active platform policy (Default: Village=20km, Town/City/Metro=40km)
   const policy = serverPolicyStore.getPolicy(policyType, classification.localityType);
 
   // 4. Compute exact physical spherical distance
   const distanceKm = calculateHaversineDistanceKm(
-    userCoordinates.lat,
-    userCoordinates.lng,
-    listingCoordinates.lat,
-    listingCoordinates.lng
+    userLat,
+    userLng,
+    listingLat,
+    listingLng
   );
 
   const allowed = distanceKm <= policy.radiusKm;

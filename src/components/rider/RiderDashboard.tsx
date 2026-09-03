@@ -374,13 +374,13 @@ export const RiderDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-                      <span>Live GPS Telemetry: Lat {activeDelivery.currentLocation.lat.toFixed(4)}, Lng {activeDelivery.currentLocation.lng.toFixed(4)}</span>
+                      <span>Live GPS Telemetry: Lat {(activeDelivery.currentLocation?.lat ?? 12.9716).toFixed(4)}, Lng {(activeDelivery.currentLocation?.lng ?? 77.5946).toFixed(4)}</span>
                     </div>
-                    <div className="text-emerald-400 font-bold">{activeDelivery.currentLocation.speed || 24} km/h • Heading {activeDelivery.currentLocation.heading || 140}°</div>
+                    <div className="text-emerald-400 font-bold">{activeDelivery.currentLocation?.speed || 24} km/h • Heading {activeDelivery.currentLocation?.heading || 140}°</div>
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                    <span>Accuracy: ±{activeDelivery.currentLocation.accuracy || 6}m • Geofence: 200m Radius</span>
+                    <span>Accuracy: ±{activeDelivery.currentLocation?.accuracy || 6}m • Geofence: 200m Radius</span>
                     <span className="text-slate-300">Status: {activeDelivery.driverStatus || 'MOVING'}</span>
                   </div>
                 </div>

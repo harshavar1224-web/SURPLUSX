@@ -139,7 +139,11 @@ class MapplsClient {
     dest: { lat: number; lng: number }
   ): Promise<MapplsRouteResult> {
     try {
-      const url = `/api/mappls/routing?startLat=${start.lat}&startLng=${start.lng}&destLat=${dest.lat}&destLng=${dest.lng}`;
+      const startLat = start?.lat ?? 12.9716;
+      const startLng = start?.lng ?? 77.5946;
+      const destLat = dest?.lat ?? 12.9716;
+      const destLng = dest?.lng ?? 77.5946;
+      const url = `/api/mappls/routing?startLat=${startLat}&startLng=${startLng}&destLat=${destLat}&destLng=${destLng}`;
       const res = await fetch(url);
       const data = await res.json();
       if (res.ok && data.success) {

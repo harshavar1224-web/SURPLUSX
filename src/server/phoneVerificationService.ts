@@ -1,18 +1,18 @@
 /**
- * SurplusX Authoritative Phone Verification Service — Exclusively Exotel Voice OTP Powered
+ * SurplusX Authoritative Phone Verification Service — Exclusively Exotel SMS OTP Powered
  * 
  * Production-Grade Architecture:
- * 1. Provider: Exotel Voice Call API (https://exotel.com)
+ * 1. Provider: Exotel SMS API (https://exotel.com)
  * 2. Mobile Verification Flow:
  *    - Server generates secure 6-digit OTP (never sent to client, never logged).
- *    - Server requests Exotel to place an automated voice call to the user.
- *    - User receives and answers the voice call to hear the OTP.
+ *    - Server requests Exotel to send an SMS OTP to the user's mobile number.
+ *    - User receives SMS message with the OTP.
  *    - User submits 6-digit OTP in SurplusX UI.
  *    - Server verifies HMAC SHA-256 hash and validates session.
- * 3. Zero 2Factor / SMS / Mock / Frontend / Demo OTP: Plaintext OTP is NEVER generated on frontend,
+ * 3. Zero Mock / Voice / Frontend / Demo OTP: Plaintext OTP is NEVER generated on frontend,
  *    NEVER returned in API responses, NEVER stored, NEVER logged, and NEVER shown in the UI.
  * 4. India Mobile Number Validation & E.164 Normalization (+91XXXXXXXXXX).
- * 5. Multi-Tier Rate Limiting & 60s Call Cooldown.
+ * 5. Multi-Tier Rate Limiting & 60s SMS Cooldown.
  * 6. SurplusX Uniqueness Enforcement (One Mobile = One Account = One Role).
  * 7. Single-Use Cryptographic Verification Tokens (15-min TTL) for transactional registration.
  */
@@ -27,7 +27,7 @@ import {
   OTPPurpose,
   BlockedPhoneReason,
 } from '../types';
-import { exotelVoiceOtpService } from './exotelVoiceOtpService';
+import { exotelSmsOtpService } from './exotelSmsOtpService';
 
 const { PhoneNumberUtil, PhoneNumberFormat } = libphonenumber;
 const phoneUtil = PhoneNumberUtil.getInstance();
@@ -86,11 +86,11 @@ export class PhoneVerificationService {
   }
 
   public isConfigured(): boolean {
-    return exotelVoiceOtpService.isConfigured();
+    return exotelSmsOtpService.isConfigured();
   }
 
   public getConfigurationStatus() {
-    return exotelVoiceOtpService.getDiagnosticStatus();
+    return exotelSmsOtpService.getDiagnosticStatus();
   }
 
   private seedInitialBlockedNumbers() {
@@ -121,11 +121,11 @@ export class PhoneVerificationService {
   }
 
   public maskPhone(phone: string): string {
-    return exotelVoiceOtpService.maskPhone(phone);
+    return exotelSmsOtpService.maskPhone(phone);
   }
 
   public normalizePhone(rawPhone: string, defaultCountry = 'IN') {
-    return exotelVoiceOtpService.normalizePhone(rawPhone);
+    return exotelSmsOtpService.normalizePhone(rawPhone);
   }
 
   public consumeVerificationToken(token: string, expectedPhone: string, expectedPurpose: OTPPurpose = 'SIGNUP') {
@@ -221,7 +221,7 @@ export class PhoneVerificationService {
   }
 
   /**
-   * Send Automated Exotel Voice Call OTP
+   * Send Automated Exotel SMS OTP
    */
   public async sendOTP(params: {
     phone: string;
@@ -229,12 +229,12 @@ export class PhoneVerificationService {
     clientIp: string;
     deviceId?: string;
   }) {
-    const result = await exotelVoiceOtpService.sendVoiceOtp(params);
+    const result = await exotelSmsOtpService.sendSmsOtp(params);
     return {
       ...result,
-      status: result.success ? ('VOICE_CALL_INITIATED' as const) : (result.status as any),
+      status: result.success ? ('SMS_SENT' as const) : (result.status as any),
       verificationSessionId: result.sessionId,
-      deliveryMethod: 'VOICE_CALL' as const,
+      deliveryMethod: 'SMS' as const,
     };
   }
 
@@ -248,7 +248,7 @@ export class PhoneVerificationService {
   }
 
   /**
-   * Verify Exotel Voice Call OTP
+   * Verify Exotel SMS OTP
    */
   public async verifyOTP(params: {
     sessionId?: string;
@@ -259,7 +259,7 @@ export class PhoneVerificationService {
     purpose?: OTPPurpose;
     clientIp: string;
   }) {
-    const result = await exotelVoiceOtpService.verifyVoiceOtp(params);
+    const result = await exotelSmsOtpService.verifySmsOtp(params);
     if (result.success && result.phoneVerification) {
       this.phoneVerifications.set(result.normalizedPhone || '', result.phoneVerification);
     }
@@ -288,7 +288,7 @@ export class PhoneVerificationService {
   }
 
   public verifyToken(token: string, expectedPhone: string, expectedPurpose: OTPPurpose = 'SIGNUP'): boolean {
-    return exotelVoiceOtpService.verifyToken(token, expectedPhone, expectedPurpose);
+    return exotelSmsOtpService.verifyToken(token, expectedPhone, expectedPurpose);
   }
 
   public isNumberBlocked(normalizedPhone: string): boolean {
@@ -372,7 +372,7 @@ export class PhoneVerificationService {
       id: `pv_override_${Date.now().toString(36)}`,
       phone: params.phone,
       normalizedPhone: normalized,
-      provider: 'EXOTEL_VOICE',
+      provider: 'EXOTEL_SMS',
       verificationStatus: 'VERIFIED',
       riskLevel: 'LOW_RISK',
       carrier: 'Manual Admin Verification',

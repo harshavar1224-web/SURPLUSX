@@ -54,21 +54,59 @@ export const MapplsDeliveryMap: React.FC<MapplsDeliveryMapProps> = ({
   const [secondsAgo, setSecondsAgo] = useState<number>(0);
   const [isRetrying, setIsRetrying] = useState<boolean>(false);
 
-  // Normalize delivery coordinates
-  const pickupLat = 'pickupLatitude' in delivery ? delivery.pickupLatitude : delivery.pickupLocation.lat;
-  const pickupLng = 'pickupLongitude' in delivery ? delivery.pickupLongitude : delivery.pickupLocation.lng;
-  const pickupAddr = 'pickupAddress' in delivery ? delivery.pickupAddress : delivery.pickupLocation.address;
+  // Normalize delivery coordinates safely
+  const dAny = delivery as any;
+  const pickupLat = (typeof dAny.pickupLatitude === 'number' ? dAny.pickupLatitude : undefined)
+    ?? delivery.pickupLocation?.lat
+    ?? dAny.origin?.lat
+    ?? 12.9716;
 
-  const dropoffLat = 'dropoffLatitude' in delivery ? delivery.dropoffLatitude : delivery.dropoffLocation.lat;
-  const dropoffLng = 'dropoffLongitude' in delivery ? delivery.dropoffLongitude : delivery.dropoffLocation.lng;
-  const dropoffAddr = 'dropoffAddress' in delivery ? delivery.dropoffAddress : delivery.dropoffLocation.address;
+  const pickupLng = (typeof dAny.pickupLongitude === 'number' ? dAny.pickupLongitude : undefined)
+    ?? delivery.pickupLocation?.lng
+    ?? dAny.origin?.lng
+    ?? 77.5946;
 
-  const currentLat = 'currentLatitude' in delivery ? delivery.currentLatitude : delivery.currentLocation.lat;
-  const currentLng = 'currentLongitude' in delivery ? delivery.currentLongitude : delivery.currentLocation.lng;
-  const currentSpeed = 'currentSpeed' in delivery ? delivery.currentSpeed : (delivery.currentLocation.speed || 0);
-  const currentHeading = 'currentHeading' in delivery ? delivery.currentHeading : (delivery.currentLocation.heading || 0);
-  const currentAccuracy = 'currentAccuracy' in delivery ? delivery.currentAccuracy : (delivery.currentLocation.accuracy || 10);
-  const lastUpdatedIso = 'lastLocationAt' in delivery ? delivery.lastLocationAt : delivery.currentLocation.lastUpdated;
+  const pickupAddr = dAny.pickupAddress
+    || delivery.pickupLocation?.address
+    || dAny.origin?.address
+    || 'Pickup Location';
+
+  const dropoffLat = (typeof dAny.dropoffLatitude === 'number' ? dAny.dropoffLatitude : undefined)
+    ?? delivery.dropoffLocation?.lat
+    ?? dAny.destination?.lat
+    ?? 12.9716;
+
+  const dropoffLng = (typeof dAny.dropoffLongitude === 'number' ? dAny.dropoffLongitude : undefined)
+    ?? delivery.dropoffLocation?.lng
+    ?? dAny.destination?.lng
+    ?? 77.5946;
+
+  const dropoffAddr = dAny.dropoffAddress
+    || delivery.dropoffLocation?.address
+    || dAny.destination?.address
+    || 'Dropoff Destination';
+
+  const currentLat = (typeof dAny.currentLatitude === 'number' ? dAny.currentLatitude : undefined)
+    ?? delivery.currentLocation?.lat
+    ?? 12.9716;
+
+  const currentLng = (typeof dAny.currentLongitude === 'number' ? dAny.currentLongitude : undefined)
+    ?? delivery.currentLocation?.lng
+    ?? 77.5946;
+
+  const currentSpeed = (typeof dAny.currentSpeed === 'number' ? dAny.currentSpeed : undefined)
+    ?? delivery.currentLocation?.speed
+    ?? 0;
+
+  const currentHeading = (typeof dAny.currentHeading === 'number' ? dAny.currentHeading : undefined)
+    ?? delivery.currentLocation?.heading
+    ?? 0;
+
+  const currentAccuracy = (typeof dAny.currentAccuracy === 'number' ? dAny.currentAccuracy : undefined)
+    ?? delivery.currentLocation?.accuracy
+    ?? 10;
+
+  const lastUpdatedIso = dAny.lastLocationAt || delivery.currentLocation?.lastUpdated;
 
   // "Last updated X seconds ago" counter
   useEffect(() => {

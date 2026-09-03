@@ -233,10 +233,10 @@ export const LiveTelemetryMap: React.FC = () => {
                       </span>
                     </div>
                     <div className="mt-2 text-[11px] text-slate-600 truncate">
-                      📦 {del.pickupLocation.address.split(',')[0]}
+                      📦 {del.pickupLocation?.address?.split(',')[0] || (del as any).pickupAddress?.split(',')[0] || (del as any).origin?.address?.split(',')[0] || 'Pickup Location'}
                     </div>
                     <div className="text-[11px] text-slate-500 truncate">
-                      🏠 {del.dropoffLocation.address.split(',')[0]}
+                      🏠 {del.dropoffLocation?.address?.split(',')[0] || (del as any).dropoffAddress?.split(',')[0] || (del as any).destination?.address?.split(',')[0] || 'Dropoff Location'}
                     </div>
                   </button>
                 );

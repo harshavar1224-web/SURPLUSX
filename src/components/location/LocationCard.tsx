@@ -38,6 +38,10 @@ export const LocationCard: React.FC<LocationCardProps> = ({
 
   const [showCoordinates, setShowCoordinates] = useState(false);
 
+  if (!userLocation) {
+    return null;
+  }
+
   // Derive GPS Accuracy Status (Specification #1, #6)
   const accuracy = userLocation.accuracy || 15;
   let accuracyLabel = 'High Precision';

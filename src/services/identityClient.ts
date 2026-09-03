@@ -306,7 +306,7 @@ export async function sendPhoneOTPApi(params: {
   } catch (err: any) {
     return {
       success: false,
-      error: err.message || 'Network error while requesting verification call.',
+      error: err.message || 'We couldn\'t send the OTP right now. Please try again.',
     };
   }
 }
@@ -338,7 +338,7 @@ export async function resendPhoneOTPApi(params: {
   } catch (err: any) {
     return {
       success: false,
-      error: err.message || 'Network error while requesting new verification call.',
+      error: err.message || 'We couldn\'t send the OTP right now. Please try again.',
     };
   }
 }

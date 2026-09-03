@@ -100,11 +100,16 @@ export function calculate1HourServiceability(
   destName = 'Customer Destination',
   isRushHour = false
 ): ServiceabilityEstimate {
+  const srcLat = sourceCoords?.lat ?? 12.9716;
+  const srcLng = sourceCoords?.lng ?? 77.5946;
+  const dstLat = destCoords?.lat ?? 12.9716;
+  const dstLng = destCoords?.lng ?? 77.5946;
+
   const straightLineKm = calculateHaversineDistance(
-    sourceCoords.lat,
-    sourceCoords.lng,
-    destCoords.lat,
-    destCoords.lng
+    srcLat,
+    srcLng,
+    dstLat,
+    dstLng
   );
 
   // Road factor based on real Indian urban street networks
