@@ -22,6 +22,7 @@
     "canvas-confetti": "^1.9.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "firebase": "^12.18.0",
     "google-libphonenumber": "^3.2.46",
     "googleapis": "^176.0.0",
     "leaflet": "^1.9.4",

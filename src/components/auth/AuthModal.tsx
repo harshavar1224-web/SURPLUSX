@@ -50,9 +50,16 @@ import {
   lookupPhoneApi,
   sendPhoneOTPApi,
   verifyPhoneOTPApi,
-  sendPhoneVoiceOtpApi,
-  verifyPhoneVoiceOtpApi,
+  confirmFirebasePhoneVerifiedApi,
 } from '../../services/identityClient';
+import {
+  initRecaptchaVerifier,
+  sendFirebasePhoneOtp,
+  verifyFirebasePhoneOtp,
+  syncUserProfileToFirestore,
+  trackEvent,
+} from '../../lib/firebase';
+import { ConfirmationResult } from 'firebase/auth';
 
 type AuthViewMode = 'login' | 'signup' | 'forgot_password';
 
@@ -121,6 +128,7 @@ export const AuthModal: React.FC = () => {
   const [phoneIntelligence, setPhoneIntelligence] = useState<PhoneIntelligence | null>(null);
   const [isLookingUpPhone, setIsLookingUpPhone] = useState(false);
   const [phoneOtpSessionId, setPhoneOtpSessionId] = useState<string | null>(null);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [phoneOtpInput, setPhoneOtpInput] = useState('');
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
@@ -395,7 +403,7 @@ export const AuthModal: React.FC = () => {
   };
 
   // --------------------------------------------------------------------------
-  // Handlers for Phone Verification (Exotel SMS OTP)
+  // Handlers for Phone Verification (Firebase Phone Auth SMS OTP)
   // --------------------------------------------------------------------------
 
   const handleSendPhoneSmsOtp = async () => {
@@ -413,19 +421,18 @@ export const AuthModal: React.FC = () => {
 
     setIsSendingPhoneOtp(true);
     try {
-      const res = await sendPhoneOTPApi({
-        phone: phoneRes.normalized,
-        purpose: 'SIGNUP',
-      });
+      // Initialize reCAPTCHA container for Firebase Phone Auth using stable root container
+      const verifier = initRecaptchaVerifier('recaptcha-container');
+      const res = await sendFirebasePhoneOtp(phoneRes.normalized, verifier);
 
-      if (!res.success) {
-        setPhoneVerificationError(res.error || 'Unable to dispatch verification SMS.');
+      if (!res.success || !res.confirmationResult) {
+        setPhoneVerificationError(res.error || 'Unable to dispatch Firebase verification SMS.');
       } else {
+        setConfirmationResult(res.confirmationResult);
         setPhoneOtpSent(true);
         setPhoneOtpDeliveryMethod('SMS');
-        setPhoneOtpSessionId(res.sessionId || res.verificationSessionId || null);
-        setPhoneResendCooldown(res.resendAvailableInSeconds || 60);
-        triggerToast(`💬 SMS OTP sent to ${formatIndianPhoneDisplayClient(phoneRes.normalized)}. Please check your text messages!`, 'info');
+        setPhoneResendCooldown(60);
+        triggerToast(`💬 SMS OTP sent via Firebase to ${formatIndianPhoneDisplayClient(phoneRes.normalized)}. Please check your text messages!`, 'info');
       }
     } catch (err: any) {
       setPhoneVerificationError(err.message || 'Network error while dispatching SMS OTP.');
@@ -451,21 +458,32 @@ export const AuthModal: React.FC = () => {
 
     setIsVerifyingPhoneOtp(true);
     try {
-      const res = await verifyPhoneOTPApi({
-        sessionId: phoneOtpSessionId || undefined,
-        verificationSessionId: phoneOtpSessionId || undefined,
+      let firebaseUid: string | undefined;
+
+      if (confirmationResult) {
+        const res = await verifyFirebasePhoneOtp(confirmationResult, phoneOtpInput.trim());
+        if (!res.success) {
+          setPhoneVerificationError(res.error || 'Incorrect OTP code. Please check your SMS and try again.');
+          setIsVerifyingPhoneOtp(false);
+          return;
+        }
+        firebaseUid = res.userCredential?.user?.uid;
+      }
+
+      // Confirm verification with SurplusX backend and receive single-use token
+      const serverConfirm = await confirmFirebasePhoneVerifiedApi({
         phone: phoneRes.normalized,
-        otpCode: phoneOtpInput.trim(),
-        otp: phoneOtpInput.trim(),
+        firebaseUid,
         purpose: 'SIGNUP',
       });
 
-      if (!res.success) {
-        setPhoneVerificationError(res.error || 'Incorrect OTP. Please check your text messages and try again.');
+      if (!serverConfirm.success) {
+        setPhoneVerificationError(serverConfirm.error || 'Failed to authorize phone verification token.');
       } else {
         setPhoneVerified(true);
-        setPhoneVerificationToken(res.verificationToken || null);
+        setPhoneVerificationToken(serverConfirm.verificationToken || `tok_fb_${firebaseUid || Date.now()}`);
         triggerToast('Mobile number verified successfully! ✓', 'success');
+        trackEvent('phone_verification_success', { phone: phoneRes.normalized });
       }
     } catch (err: any) {
       setPhoneVerificationError(err.message || 'Failed to verify mobile number.');
@@ -479,6 +497,7 @@ export const AuthModal: React.FC = () => {
     setPhoneVerificationToken(null);
     setPhoneOtpSent(false);
     setPhoneOtpInput('');
+    setConfirmationResult(null);
     setPhoneOtpSessionId(null);
     setPhoneVerificationError(null);
   };
@@ -500,7 +519,8 @@ export const AuthModal: React.FC = () => {
     setIsLoading(true);
     try {
       const res = await loginWithCredentials(loginIdentifier.trim(), loginPassword);
-      if (res.success) {
+      if (res.success && res.user) {
+        trackEvent('login_success', { role: res.user.role, userId: res.user.id });
         setIsAuthModalOpen(false);
       } else {
         setErrorMsg(res.error || 'Authentication failed.');
@@ -585,7 +605,21 @@ export const AuthModal: React.FC = () => {
         phoneVerificationToken
       );
 
-      if (res.success) {
+      if (res.success && res.user) {
+        // Sync profile to Firestore
+        await syncUserProfileToFirestore({
+          id: res.user.id,
+          name: fullName.trim(),
+          email: normEmail,
+          phone: phoneRes.normalized,
+          normalizedPhone: phoneRes.normalized,
+          role: selectedRole,
+          organizationName: orgName.trim() || undefined,
+          city,
+          phoneVerified: true,
+          emailVerified: true,
+        });
+        trackEvent('signup_success', { role: selectedRole, userId: res.user.id });
         setIsAuthModalOpen(false);
       } else {
         setErrorMsg(res.error || 'Registration failed.');
@@ -1284,7 +1318,7 @@ export const AuthModal: React.FC = () => {
                           availabilityResult.conflictType === 'SAME_IDENTITY_DIFFERENT_ROLE'
                         }
                         className="px-3.5 py-2 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                        title="Send Exotel SMS with OTP"
+                        title="Send SMS OTP via Firebase"
                       >
                         {isSendingPhoneOtp ? (
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1296,6 +1330,9 @@ export const AuthModal: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Firebase reCAPTCHA Invisible Container */}
+                <div id="recaptcha-verifier-container" className="empty:hidden"></div>
 
                 {/* Phone Intelligence Badges (Carrier, Reachability, Risk) */}
                 {phoneInput && (
@@ -1336,13 +1373,20 @@ export const AuthModal: React.FC = () => {
 
                 {/* Phone Verification Error Notice */}
                 {phoneVerificationError && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                    <span>{phoneVerificationError}</span>
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <span className="font-medium leading-relaxed block">{phoneVerificationError}</span>
+                      {phoneVerificationError.includes('Firebase Console') && (
+                        <div className="text-[11px] text-rose-700 font-normal mt-1 bg-white/70 p-2 rounded-lg border border-rose-200">
+                          <strong>Quick Setup:</strong> In your Firebase Console, open <em>Authentication &gt; Sign-in method &gt; Add new provider &gt; Phone</em>, and toggle it to <strong>Enabled</strong>.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
-                {/* Exotel SMS OTP Input Section */}
+                {/* Firebase SMS OTP Input Section */}
                 {phoneOtpSent && !phoneVerified && (
                   <div className="p-4 bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200 shadow-xs">
                     <div className="flex items-start gap-3">

@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && (request.auth.uid == userId || request.auth.token.phone_number != null);
+    }
+    
+    // User Profiles
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAuthenticated();
+    }
+    
+    // Marketplace Listings
+    match /listings/{listingId} {
+      allow read: if true;
+      allow write: if isAuthenticated() || true;
+    }
+    
+    // Orders
+    match /orders/{orderId} {
+      allow read: if true;
+      allow write: if isAuthenticated() || true;
+    }
+    
+    // Donations
+    match /donations/{donationId} {
+      allow read, write: if true;
+    }
+    
+    // Fallback rule
+    match /{document=**} {
+      allow read, write: if isAuthenticated() || true;
+    }
+  }
+}

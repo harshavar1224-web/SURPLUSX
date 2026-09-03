@@ -377,7 +377,7 @@ export interface PhoneVerification {
   userId?: string;
   phone: string;
   normalizedPhone: string;
-  provider: 'EXOTEL_SMS' | 'EXOTEL';
+  provider: 'FIREBASE' | 'FIREBASE_AUTH' | 'LOCAL';
   verificationStatus: PhoneVerificationStatus;
   riskLevel: PhoneRiskLevel;
   carrier?: string;
@@ -394,7 +394,7 @@ export interface PhoneVerificationSession {
   id: string;
   phone: string;
   normalizedPhone: string;
-  provider: 'EXOTEL_SMS' | 'EXOTEL';
+  provider: 'FIREBASE' | 'FIREBASE_AUTH' | 'LOCAL';
   provider_session_id?: string;
   purpose: OTPPurpose;
   status: 'PENDING' | 'VERIFIED' | 'EXPIRED' | 'FAILED';

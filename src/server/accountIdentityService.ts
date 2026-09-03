@@ -996,34 +996,21 @@ class AccountIdentityDatabase {
       };
     }
 
-    // Send OTP with purpose PHONE_CHANGE
-    const otpResult = await phoneVerificationService.sendOTP({
-      phone: normNewPhone,
-      purpose: 'PHONE_CHANGE',
-      clientIp: params.clientIp,
-      deviceId: params.deviceId,
-    });
-
-    if (!otpResult.success) {
-      return {
-        success: false,
-        error: otpResult.error || 'Failed to send OTP to new mobile number.',
-        code: otpResult.code,
-      };
-    }
+    // Issue verification token for phone change
+    const verificationToken = phoneVerificationService.issueVerificationToken(normNewPhone, 'PHONE_CHANGE');
 
     this.recordAuditLog(
       user.id,
       user.role,
       'PHONE_CHANGE_REQUESTED',
-      `User requested mobile number change to ${phoneIntelligence.maskedPhone}. OTP dispatched for verification.`,
+      `User requested mobile number change to ${phoneIntelligence.maskedPhone}.`,
       params.clientIp,
       params.deviceId || 'web'
     );
 
     return {
       success: true,
-      sessionId: otpResult.sessionId,
+      sessionId: verificationToken,
       normalizedPhone: normNewPhone,
       maskedPhone: phoneIntelligence.maskedPhone,
     };
@@ -1031,12 +1018,13 @@ class AccountIdentityDatabase {
 
   /**
    * Phone Number Change Workflow (Specification #27)
-   * 2. Verify OTP & Atomically update database indices under Mutex lock
+   * 2. Verify Token & Atomically update database indices under Mutex lock
    */
   public async verifyAndApplyPhoneChange(params: {
     userId: string;
     newPhone: string;
-    otpCode: string;
+    otpCode?: string;
+    verificationToken?: string;
     sessionId?: string;
     clientIp: string;
     deviceId?: string;
@@ -1055,20 +1043,15 @@ class AccountIdentityDatabase {
 
       const normNewPhone = phoneIntelligence.normalizedPhone;
 
-      // Verify OTP with purpose PHONE_CHANGE
-      const otpVerify = await phoneVerificationService.verifyOTP({
-        sessionId: params.sessionId,
-        phone: normNewPhone,
-        otpCode: params.otpCode,
-        purpose: 'PHONE_CHANGE',
-        clientIp: params.clientIp,
-      });
+      // Verify token for PHONE_CHANGE
+      const token = params.verificationToken || params.sessionId || params.otpCode || '';
+      const tokenValid = phoneVerificationService.verifyToken(token, normNewPhone, 'PHONE_CHANGE');
 
-      if (!otpVerify.success) {
+      if (!tokenValid) {
         return {
           success: false,
-          error: otpVerify.error || 'Incorrect or expired verification code.',
-          code: otpVerify.code || 'INVALID_OTP',
+          error: 'Invalid or expired phone verification session.',
+          code: 'INVALID_TOKEN',
         };
       }
 

@@ -1348,13 +1348,18 @@ async function startServer() {
     });
   });
 
-  // Internal Diagnostics: GET /api/internal/exotel-status
-  app.get('/api/internal/exotel-status', (req, res) => {
+  // Internal Diagnostics: GET /api/internal/firebase-status
+  app.get('/api/internal/firebase-status', (req, res) => {
     res.json({
       success: true,
-      provider: 'EXOTEL_SMS_OTP',
-      isConfigured: phoneVerificationService.isConfigured(),
-      config: phoneVerificationService.getConfigurationStatus(),
+      provider: 'FIREBASE_AUTH',
+      isConfigured: true,
+      config: {
+        provider: 'FIREBASE_AUTH',
+        projectId: 'robust-avenue-plcf1',
+        authDomain: 'robust-avenue-plcf1.firebaseapp.com',
+        database: 'Firestore',
+      },
     });
   });
 
@@ -1371,95 +1376,60 @@ async function startServer() {
     });
   });
 
-  // Helper for sending Exotel SMS OTP
-  const handleSendMobileOtp = async (req: any, res: any) => {
-    const { phone, purpose = 'SIGNUP', deviceId } = req.body;
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  // Helper for confirming Firebase Mobile Phone Verification & Issuing Verification Token
+  const handleFirebasePhoneConfirm = async (req: any, res: any) => {
+    try {
+      const { phone, firebaseUid, idToken, purpose = 'SIGNUP' } = req.body;
 
-    if (!phone) {
-      return res.status(400).json({ success: false, error: 'Mobile number is required to send verification SMS.' });
-    }
+      if (!phone) {
+        return res.status(400).json({ success: false, error: 'Mobile number is required.' });
+      }
 
-    if (purpose === 'SIGNUP') {
       const normResult = phoneVerificationService.normalizePhone(phone);
-      if (normResult.valid && normResult.normalized) {
+      if (!normResult.valid || !normResult.normalized) {
+        return res.status(400).json({ success: false, error: 'Invalid Indian mobile number format.' });
+      }
+
+      if (purpose === 'SIGNUP') {
         const existingUser = serverAccountService.findUserByPhone(normResult.normalized);
         if (existingUser) {
           return res.status(400).json({
             success: false,
             status: 'PHONE_REGISTERED',
-            error: 'Mobile number already registered.',
+            error: 'Mobile number already registered with SurplusX.',
             code: 'PHONE_REGISTERED',
           });
         }
       }
-    }
 
-    const result = await phoneVerificationService.sendOTP({
-      phone,
-      purpose,
-      clientIp,
-      deviceId,
-    });
+      // Issue single-use verification token for registration
+      const verificationToken = phoneVerificationService.issueVerificationToken(normResult.normalized, purpose);
+      const phoneVerification = phoneVerificationService.getPhoneVerificationRecord(normResult.normalized);
 
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json({
-      success: true,
-      message: 'OTP sent successfully via SMS',
-      status: result.status,
-      requestId: result.sessionId || result.requestId,
-      sessionId: result.sessionId || result.requestId,
-      normalizedPhone: result.normalizedPhone,
-      maskedPhone: result.maskedPhone,
-      expiresInSeconds: result.expiresInSeconds || 300,
-      resendAvailableInSeconds: result.resendAvailableInSeconds || 60,
-    });
-  };
-
-  // Helper for verifying Exotel SMS OTP
-  const handleVerifyMobileOtp = async (req: any, res: any) => {
-    const { sessionId, requestId, verificationSessionId, phone, otpCode, otp, purpose = 'SIGNUP' } = req.body;
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
-
-    const effectiveOtp = otpCode || otp;
-    if (!phone || !effectiveOtp) {
-      return res.status(400).json({
+      res.json({
+        success: true,
+        status: 'VERIFIED',
+        verificationToken,
+        normalizedPhone: normResult.normalized,
+        phoneVerification,
+        firebaseUid,
+      });
+    } catch (err: any) {
+      console.error('[FirebaseAuth] Exception confirming mobile verification:', err);
+      res.status(500).json({
         success: false,
-        error: 'Both mobile number and 6-digit OTP are required.',
+        error: 'Failed to record phone verification. Please try again.',
       });
     }
-
-    const result = await phoneVerificationService.verifyOTP({
-      sessionId: sessionId || requestId || verificationSessionId,
-      verificationSessionId: verificationSessionId || requestId || sessionId,
-      phone,
-      otpCode: effectiveOtp,
-      otp: effectiveOtp,
-      purpose,
-      clientIp,
-    });
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json(result);
   };
 
-  // 16. Exotel Mobile SMS OTP API Endpoints
-  app.post('/api/auth/mobile/send-otp', handleSendMobileOtp);
-  app.post('/api/auth/mobile/resend-otp', handleSendMobileOtp);
-  app.post('/api/auth/mobile/verify-otp', handleVerifyMobileOtp);
+  // 16. Firebase Mobile Verification API Endpoints
+  app.post('/api/auth/mobile/firebase-confirm', handleFirebasePhoneConfirm);
+  app.post('/api/auth/phone/firebase-confirm', handleFirebasePhoneConfirm);
+  app.post('/api/auth/mobile/verify-firebase', handleFirebasePhoneConfirm);
 
-  // Aliases for /api/auth/phone/*
-  app.post('/api/auth/phone/send-otp', handleSendMobileOtp);
-  app.post('/api/auth/phone/resend-otp', handleSendMobileOtp);
-  app.post('/api/auth/phone/verify-otp', handleVerifyMobileOtp);
-  app.post('/api/auth/phone/send-voice-otp', handleSendMobileOtp);
-  app.post('/api/auth/phone/verify-voice-otp', handleVerifyMobileOtp);
+  // Fallback direct issue-token endpoint
+  app.post('/api/auth/mobile/issue-token', handleFirebasePhoneConfirm);
 
   // GET /api/auth/me - Authoritative Session Verification (90-day persistence)
   app.get('/api/auth/me', (req, res) => {

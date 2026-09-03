@@ -279,6 +279,34 @@ export async function lookupPhoneApi(phone: string): Promise<{
   }
 }
 
+export async function confirmFirebasePhoneVerifiedApi(params: {
+  phone: string;
+  firebaseUid?: string;
+  idToken?: string;
+  purpose?: OTPPurpose;
+}): Promise<{
+  success: boolean;
+  status?: string;
+  verificationToken?: string;
+  normalizedPhone?: string;
+  phoneVerification?: PhoneVerification;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/auth/mobile/firebase-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Network error while registering Firebase phone verification.',
+    };
+  }
+}
+
 export async function sendPhoneOTPApi(params: {
   phone: string;
   purpose?: OTPPurpose;

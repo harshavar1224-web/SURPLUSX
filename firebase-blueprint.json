@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "SurplusX Registered User Profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "normalizedPhone": { "type": "string" },
+        "role": { "type": "string", "enum": ["CONSUMER", "BUSINESS", "NGO", "ADMIN", "SUPER_ADMIN"] },
+        "organizationName": { "type": "string" },
+        "city": { "type": "string" },
+        "phoneVerified": { "type": "boolean" },
+        "emailVerified": { "type": "boolean" },
+        "firebaseUid": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "createdAt", "updatedAt"]
+    },
+    "SurplusListing": {
+      "title": "SurplusListing",
+      "description": "Surplus food and retail inventory listings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "businessId": { "type": "string" },
+        "businessName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "originalPrice": { "type": "number" },
+        "discountedPrice": { "type": "number" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "city": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "title", "originalPrice", "discountedPrice", "quantity", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Food rescue orders and consumer purchases",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "listingId": { "type": "string" },
+        "businessId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "listingId", "quantity", "totalAmount", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "entity": "UserProfile",
+      "description": "User profile records and account details"
+    },
+    "/listings/{listingId}": {
+      "entity": "SurplusListing",
+      "description": "Surplus food marketplace listings"
+    },
+    "/orders/{orderId}": {
+      "entity": "Order",
+      "description": "Customer and NGO orders"
+    }
+  }
+}
