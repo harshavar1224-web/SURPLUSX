@@ -331,7 +331,7 @@ export const AdminPricingTab: React.FC = () => {
             <div className="space-y-3 text-xs">
               <div className="flex justify-between py-1.5 border-b border-slate-800/60">
                 <span className="text-slate-400">Total Ledgers Recorded</span>
-                <span className="font-mono font-bold">{ledgers.length} transactions</span>
+                <span className="font-mono font-bold">{(ledgers || []).length} transactions</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-800/60">
                 <span className="text-slate-400">Reconciliation Errors</span>
@@ -339,7 +339,7 @@ export const AdminPricingTab: React.FC = () => {
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-800/60">
                 <span className="text-slate-400">NGO Delivery Payouts</span>
-                <span className="font-mono font-bold">{settlements.length} active</span>
+                <span className="font-mono font-bold">{(settlements || []).length} active</span>
               </div>
               <div className="flex justify-between py-1.5">
                 <span className="text-slate-400">Immutable Snapshots</span>
@@ -362,10 +362,10 @@ export const AdminPricingTab: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Recent Financial Audit Logs</h3>
             <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-              {auditLogs.length === 0 ? (
+              {(auditLogs || []).length === 0 ? (
                 <p className="text-xs text-slate-400 italic py-4 text-center">No recent configuration changes logged.</p>
               ) : (
-                auditLogs.map((log) => (
+                (auditLogs || []).map((log) => (
                   <div key={log.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-[11px] space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-slate-900">{log.action}</span>
@@ -391,7 +391,7 @@ export const AdminPricingTab: React.FC = () => {
             <p className="text-xs text-slate-500">Every rupee broken down into business, NGO logistics, platform revenue, and tax liability.</p>
           </div>
           <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-mono font-bold">
-            {ledgers.length} Records
+            {(ledgers || []).length} Records
           </span>
         </div>
 
@@ -410,14 +410,14 @@ export const AdminPricingTab: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
-              {ledgers.length === 0 ? (
+              {(ledgers || []).length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-slate-400 italic font-sans">
                     No transactions recorded yet in current session. Place an order or donation to test money flow.
                   </td>
                 </tr>
               ) : (
-                ledgers.map((l) => (
+                (ledgers || []).map((l) => (
                   <tr key={l.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-900">
                       <div>{l.id}</div>
@@ -454,7 +454,7 @@ export const AdminPricingTab: React.FC = () => {
             <p className="text-xs text-slate-500">Distinct from charitable donations. Reimbursements for order delivery and transport execution.</p>
           </div>
           <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-mono font-bold">
-            {settlements.length} Partner Settlements
+            {(settlements || []).length} Partner Settlements
           </span>
         </div>
 
@@ -472,14 +472,14 @@ export const AdminPricingTab: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono text-slate-700">
-              {settlements.length === 0 ? (
+              {(settlements || []).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-400 italic font-sans">
                     No NGO logistics settlements queued yet.
                   </td>
                 </tr>
               ) : (
-                settlements.map((s) => (
+                (settlements || []).map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-900">{s.id}</td>
                     <td className="py-3 px-4 font-sans font-bold text-slate-800">{s.ngoName}</td>

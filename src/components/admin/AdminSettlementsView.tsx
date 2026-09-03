@@ -3,7 +3,9 @@ import { IndianRupee, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 export const AdminSettlementsView: React.FC = () => {
-  const { businesses, triggerToast } = useApp();
+  const { allUsers, triggerToast } = useApp();
+  const safeUsers = allUsers || [];
+  const businesses = safeUsers.filter(u => u.role === 'BUSINESS');
 
   const handleSettle = (name: string) => {
     triggerToast(`Settlement processed successfully for merchant ${name}.`, 'success');
@@ -34,14 +36,14 @@ export const AdminSettlementsView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-            {businesses.length === 0 ? (
+            {(businesses || []).length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-12 text-center text-slate-400">
                   No payout accounts registered.
                 </td>
               </tr>
             ) : (
-              businesses.map((b) => (
+              (businesses || []).map((b) => (
                 <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3.5 px-6 font-semibold text-slate-900">{b.name}</td>
                   <td className="py-3.5 px-6 text-slate-600">{b.category}</td>

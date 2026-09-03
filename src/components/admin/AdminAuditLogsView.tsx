@@ -17,7 +17,7 @@ export const AdminAuditLogsView: React.FC = () => {
           </p>
         </div>
         <div className="px-3 py-2 bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200">
-          Total Logs: {auditLogs.length}
+          Total Logs: {(auditLogs || []).length}
         </div>
       </div>
 
@@ -33,14 +33,14 @@ export const AdminAuditLogsView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-            {auditLogs.length === 0 ? (
+            {(auditLogs || []).length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-12 text-center text-slate-400">
                   No audit log entries recorded.
                 </td>
               </tr>
             ) : (
-              auditLogs.map((log) => (
+              (auditLogs || []).map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3.5 px-6 font-mono text-slate-500">{log.timestamp}</td>
                   <td className="py-3.5 px-6 font-bold text-purple-700">{log.category}</td>

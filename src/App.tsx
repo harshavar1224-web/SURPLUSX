@@ -3,6 +3,13 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/Navbar';
 import { AppSidebar } from './components/navigation/AppSidebar';
 import { PublicLanding } from './components/PublicLanding';
+import { SurplusXFooter } from './components/SurplusXFooter';
+import { AboutView } from './components/public/AboutView';
+import { HowItWorksView } from './components/public/HowItWorksView';
+import { BusinessLandingView } from './components/public/BusinessLandingView';
+import { NgoLandingView } from './components/public/NgoLandingView';
+import { PrivacyPolicyView } from './components/public/PrivacyPolicyView';
+import { TermsView } from './components/public/TermsView';
 import { ConsumerDashboard } from './components/consumer/ConsumerDashboard';
 import { BrowseListings } from './components/consumer/BrowseListings';
 import { InteractiveMapView } from './components/consumer/InteractiveMapView';
@@ -30,6 +37,7 @@ import { LocationSelectModal } from './components/location/LocationSelectModal';
 import { Leaf } from 'lucide-react';
 import { isAdminRole } from './types';
 import { AdminLayout } from './components/admin/AdminLayout';
+import { DashboardLayout } from './components/common/DashboardLayout';
 import { AdminOverview } from './components/admin/AdminOverview';
 import { AdminImpactView } from './components/admin/AdminImpactView';
 import { AdminUsersView } from './components/admin/AdminUsersView';
@@ -49,7 +57,24 @@ import { AdminReportsFraudView } from './components/admin/AdminReportsFraudView'
 import { AdminAuditLogsView } from './components/admin/AdminAuditLogsView';
 import { AdminSettingsView } from './components/admin/AdminSettingsView';
 import { AdminAdministratorsView } from './components/admin/AdminAdministratorsView';
+import { AdminCouponsView } from './components/admin/AdminCouponsView';
+import { AdminReferralsRewardsView } from './components/admin/AdminReferralsRewardsView';
 import { LocationSettingsTab } from './components/admin/LocationSettingsTab';
+
+const PUBLIC_ROUTE_MAP: Record<string, string> = {
+  '/about': 'about',
+  '/how-it-works': 'how-it-works',
+  '/business': 'business',
+  '/for-business': 'business',
+  '/ngo': 'ngo',
+  '/for-ngo': 'ngo',
+  '/privacy': 'privacy',
+  '/terms': 'terms',
+  '/support': 'support',
+  '/help': 'support',
+  '/browse': 'browse',
+  '/map': 'map',
+};
 
 const ADMIN_ROUTE_MAP: Record<string, string> = {
   '/admin': 'dashboard',
@@ -69,6 +94,8 @@ const ADMIN_ROUTE_MAP: Record<string, string> = {
   '/admin/live-map': 'live-map',
   '/admin/map': 'live-map',
   '/admin/analytics': 'analytics',
+  '/admin/coupons': 'coupons',
+  '/admin/referrals': 'referrals',
   '/admin/messages': 'messages',
   '/admin/verification': 'verification',
   '/admin/location-radius': 'location-settings',
@@ -101,6 +128,8 @@ const VIEW_TO_ADMIN_ROUTE: Record<string, string> = {
   'live-map': '/admin/live-map',
   map: '/admin/live-map',
   analytics: '/admin/analytics',
+  coupons: '/admin/coupons',
+  referrals: '/admin/referrals',
   messages: '/admin/messages',
   verification: '/admin/verification',
   'location-settings': '/admin/location-radius',
@@ -122,14 +151,20 @@ const MainContent: React.FC = () => {
     setActiveView,
     canAccessView,
     previewRole,
+    authLoading,
   } = useApp();
 
-  // Bidirectional URL route sync for Admin and deep-linked paths
+  // Bidirectional URL route sync for Admin, Public, and deep-linked paths
   useEffect(() => {
     const handleLocationSync = () => {
       const pathname = window.location.pathname.toLowerCase().replace(/\/$/, '') || '/';
       if (pathname.startsWith('/admin')) {
         const matchedView = ADMIN_ROUTE_MAP[pathname] || 'dashboard';
+        if (matchedView !== activeView) {
+          setActiveView(matchedView);
+        }
+      } else if (PUBLIC_ROUTE_MAP[pathname]) {
+        const matchedView = PUBLIC_ROUTE_MAP[pathname];
         if (matchedView !== activeView) {
           setActiveView(matchedView);
         }
@@ -151,19 +186,98 @@ const MainContent: React.FC = () => {
     }
   }, [activeView, currentUser]);
 
-  // 1. Render Public Landing View (No Sidebar)
-  if (
-    activeView === 'landing' ||
-    activeView === 'public-landing' ||
-    activeView === 'how-it-works' ||
-    activeView === 'about'
-  ) {
+  // Redirect authenticated users visiting root '/' or landing to their appropriate dashboard route/view
+  useEffect(() => {
+    if (!authLoading && currentUser) {
+      const pathname = window.location.pathname.toLowerCase().replace(/\/$/, '') || '/';
+      if (pathname === '/' || pathname === '' || activeView === 'landing' || activeView === 'public-landing') {
+        if (isAdminRole(currentUser.role)) {
+          setActiveView('dashboard');
+          if (window.location.pathname !== '/admin') {
+            window.history.replaceState(null, '', '/admin');
+          }
+        } else if (currentUser.role === 'BUSINESS') {
+          setActiveView('dashboard');
+          if (window.location.pathname !== '/business') {
+            window.history.replaceState(null, '', '/business');
+          }
+        } else if (currentUser.role === 'NGO') {
+          setActiveView('dashboard');
+          if (window.location.pathname !== '/ngo') {
+            window.history.replaceState(null, '', '/ngo');
+          }
+        } else {
+          setActiveView('dashboard');
+          if (window.location.pathname !== '/') {
+            window.history.replaceState(null, '', '/');
+          }
+        }
+      }
+    }
+  }, [authLoading, currentUser, activeView]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
+        <div className="text-sm font-semibold tracking-wide text-slate-300">Restoring SurplusX Secure Session...</div>
+      </div>
+    );
+  }
+
+  // 1. Render Public Views for unauthenticated visitors
+  const isPublicView = [
+    'landing',
+    'public-landing',
+    'about',
+    'how-it-works',
+    'business',
+    'ngo',
+    'privacy',
+    'terms',
+    'support',
+    'help',
+    'browse',
+    'map',
+  ].includes(activeView);
+
+  if (!currentUser && isPublicView) {
+    const renderUnauthenticatedContent = () => {
+      switch (activeView) {
+        case 'about':
+          return <AboutView />;
+        case 'how-it-works':
+          return <HowItWorksView />;
+        case 'business':
+          return <BusinessLandingView />;
+        case 'ngo':
+          return <NgoLandingView />;
+        case 'privacy':
+          return <PrivacyPolicyView />;
+        case 'terms':
+          return <TermsView />;
+        case 'support':
+        case 'help':
+          return <HelpSupportView />;
+        case 'browse':
+          return <BrowseListings />;
+        case 'map':
+          return <InteractiveMapView />;
+        case 'landing':
+        case 'public-landing':
+        default:
+          return <PublicLanding />;
+      }
+    };
+
     return (
       <div className="min-h-screen bg-slate-50/70 text-slate-900 flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
         <Navbar />
         <main className="flex-1">
-          <PublicLanding />
+          {renderUnauthenticatedContent()}
         </main>
+        <SurplusXFooter />
+
         {/* Global Modals */}
         <AuthModal />
         <LocationSelectModal />
@@ -182,6 +296,7 @@ const MainContent: React.FC = () => {
         <main className="flex-1 py-10">
           <AuthRequired targetView={activeView} />
         </main>
+        <SurplusXFooter />
         <AuthModal />
         <LocationSelectModal />
         <ListingDetailModal />
@@ -202,6 +317,7 @@ const MainContent: React.FC = () => {
             <AccessDenied attemptedView={activeView} />
           </main>
         </div>
+        <SurplusXFooter />
         <AuthModal />
         <LocationSelectModal />
         <ListingDetailModal />
@@ -214,12 +330,18 @@ const MainContent: React.FC = () => {
   // 4. Authenticated View Resolution
   const renderCurrentView = () => {
     // Universal Common Views across roles
+    if (activeView === 'about') return <AboutView />;
+    if (activeView === 'how-it-works') return <HowItWorksView />;
+    if (activeView === 'business') return <BusinessLandingView />;
+    if (activeView === 'ngo') return <NgoLandingView />;
+    if (activeView === 'privacy') return <PrivacyPolicyView />;
+    if (activeView === 'terms') return <TermsView />;
     if (activeView === 'messages') return <MessagesView />;
     if (activeView === 'impact' && !isAdminRole(currentUser.role)) return <RoleImpactView />;
     if (activeView === 'profile') return <ProfileView />;
     if (activeView === 'settings') return <SettingsView />;
     if (activeView === 'notifications') return <NotificationsView />;
-    if (activeView === 'help') return <HelpSupportView />;
+    if (activeView === 'help' || activeView === 'support') return <HelpSupportView />;
     if (activeView === 'live-tracking') return <LiveTrackingView />;
     if (activeView === 'browse' || activeView === 'explore' || activeView === 'explore-surplus')
       return <BrowseListings />;
@@ -271,6 +393,10 @@ const MainContent: React.FC = () => {
           return <AdminLiveMapView />;
         case 'analytics':
           return <AdminAnalyticsView />;
+        case 'coupons':
+          return <AdminCouponsView />;
+        case 'referrals':
+          return <AdminReferralsRewardsView />;
         case 'verification':
           return <AdminVerificationView />;
         case 'location-settings':
@@ -331,34 +457,10 @@ const MainContent: React.FC = () => {
     }
   };
 
-  // If user is Admin/Super Admin, render dedicated stationary AdminLayout
-  if (isAdminRole(currentUser.role)) {
-    return (
-      <AdminLayout>
-        {renderCurrentView()}
-
-        {/* Global Modals */}
-        <AuthModal />
-        <LocationSelectModal />
-        <ListingDetailModal />
-        <CartAndCheckoutModal />
-        <ReceiptModal />
-      </AdminLayout>
-    );
-  }
-
-  // Non-Admin User Layout (Consumer, Merchant, NGO, Rider, Retailer)
+  // Universal Dashboard Layout for all authenticated roles (Consumer, Business, NGO, Retailer, Rider, Admin, Super Admin)
   return (
-    <div className="min-h-screen bg-slate-50/70 text-slate-900 flex flex-col antialiased selection:bg-purple-500 selection:text-white">
-      <Navbar />
-
-      <div className="flex-1 flex flex-row w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 gap-6 items-start">
-        {/* Authoritative Role-Aware AppSidebar */}
-        <AppSidebar />
-
-        {/* Main Viewport */}
-        <main className="flex-1 min-w-0 pb-16">{renderCurrentView()}</main>
-      </div>
+    <DashboardLayout>
+      {renderCurrentView()}
 
       {/* Global Modals */}
       <AuthModal />
@@ -366,24 +468,7 @@ const MainContent: React.FC = () => {
       <ListingDetailModal />
       <CartAndCheckoutModal />
       <ReceiptModal />
-
-      {/* App Footer */}
-      <footer className="bg-white border-t border-slate-200/80 py-8 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-4">
-          <div className="flex items-center gap-2 text-slate-600 font-medium">
-            <Leaf className="w-4 h-4 text-emerald-600" />
-            <span>SurplusX Zero-Waste Operating System • ISO 14001 Food Rescue Governance</span>
-          </div>
-          <div className="flex items-center gap-4 text-[11px]">
-            <span>Verified 80G Tax Compliant</span>
-            <span>•</span>
-            <span>FSSAI Hygiene Standards</span>
-            <span>•</span>
-            <span>1-Device Hardware Trust</span>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </DashboardLayout>
   );
 };
 

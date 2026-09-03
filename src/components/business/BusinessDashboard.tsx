@@ -15,9 +15,11 @@ import {
   Zap,
   BarChart3,
   Percent,
+  ShieldCheck,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BusinessInventoryItem } from '../../types';
+import { BusinessVerificationWidget } from './BusinessVerificationWidget';
 
 export const BusinessDashboard: React.FC = () => {
   const {
@@ -32,13 +34,14 @@ export const BusinessDashboard: React.FC = () => {
     orders,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'inventory' | 'listings' | 'donations' | 'finance' | 'ai'>('inventory');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'listings' | 'donations' | 'finance' | 'ai' | 'verification'>('inventory');
 
   useEffect(() => {
     if (activeView === 'inventory') setActiveTab('inventory');
     else if (activeView === 'listings' || activeView === 'surplus-listings') setActiveTab('listings');
     else if (activeView === 'donations' || activeView === 'ngo-partners') setActiveTab('donations');
     else if (activeView === 'finance' || activeView === 'finance-settlements' || activeView === 'analytics') setActiveTab('finance');
+    else if (activeView === 'verification') setActiveTab('verification');
     else if (activeView === 'orders' || activeView === 'reservations' || activeView === 'pickup-management') setActiveTab('listings');
   }, [activeView]);
   const [selectedInvForSurplus, setSelectedInvForSurplus] = useState<BusinessInventoryItem | null>(null);

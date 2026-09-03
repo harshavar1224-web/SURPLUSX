@@ -3,9 +3,14 @@ import { BarChart3, TrendingUp, IndianRupee, ShoppingBag, Users } from 'lucide-r
 import { useApp } from '../../context/AppContext';
 
 export const AdminAnalyticsView: React.FC = () => {
-  const { orders, allUsers, businesses, ngos } = useApp();
+  const { orders, allUsers, ngos } = useApp();
+  
+  const safeOrders = orders || [];
+  const safeUsers = allUsers || [];
+  const safeNgos = ngos || [];
+  const businesses = safeUsers.filter(u => u.role === 'BUSINESS');
 
-  const totalGMV = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const totalGMV = safeOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -33,8 +38,8 @@ export const AdminAnalyticsView: React.FC = () => {
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
           <span className="text-xs font-bold text-slate-500 uppercase">Total Ecosystem Accounts</span>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{allUsers.length}</div>
-          <span className="text-xs text-blue-600 font-semibold mt-1 block">{businesses.length} merchants, {ngos.length} NGOs</span>
+          <div className="text-2xl font-extrabold text-slate-900 mt-2">{safeUsers.length}</div>
+          <span className="text-xs text-blue-600 font-semibold mt-1 block">{(businesses || []).length} merchants, {safeNgos.length} NGOs</span>
         </div>
       </div>
     </div>

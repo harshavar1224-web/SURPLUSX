@@ -487,6 +487,277 @@ https://surplusx.org`;
       html,
     });
   }
+
+  /**
+   * 7. Business Verification Approved Email Notification
+   */
+  public async sendBusinessVerificationApprovalEmail(
+    email: string,
+    businessName: string,
+    contactName: string,
+    dashboardUrl?: string
+  ): Promise<SendEmailResult> {
+    const targetDashboardUrl = dashboardUrl || `${process.env.APP_URL || 'http://localhost:3000'}/dashboard?view=business-dashboard`;
+    const subject = '🎉 Welcome to SurplusX — Your Business Has Been Approved!';
+    const text = `Hello ${contactName || 'Valued Business Partner'},\n\n` +
+      `Warm greetings from SurplusX! 👋\n\n` +
+      `We are delighted to inform you that ${businessName} has successfully completed our business verification process and has been approved and activated on the SurplusX platform. 🎉\n\n` +
+      `Your business account is now officially active, and you can start using SurplusX to list your surplus food, connect with customers and organizations, and contribute towards reducing food waste.\n\n` +
+      `We're excited to have you as part of the SurplusX community! 🌱\n\n` +
+      `Together, let's Rescue Surplus. Create Impact.\n\n` +
+      `You can now access your business dashboard and start managing your SurplusX activities:\n${targetDashboardUrl}\n\n` +
+      `If you have any questions or need assistance, our support team is always here to help.\n` +
+      `Support: surplusx.support@gmail.com\n\n` +
+      `Warm regards,\n` +
+      `Team SurplusX\n` +
+      `Rescue Surplus. Create Impact.`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SurplusX Business Approval</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f8fafc; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc; padding:36px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:560px; background-color:#ffffff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+          <tr>
+            <td style="background-color:#047857; padding:28px 32px; text-align:left;">
+              <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:800; letter-spacing:-0.5px;">SurplusX</h1>
+              <p style="margin:4px 0 0 0; color:#a7f3d0; font-size:13px; font-weight:500;">Rescue Surplus. Create Impact.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 16px 0; color:#0f172a; font-size:20px; font-weight:800;">🎉 Welcome to SurplusX — Your Business Has Been Approved!</h2>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Hello <strong>${contactName || 'Valued Business Partner'}</strong>,
+              </p>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Warm greetings from SurplusX! 👋
+              </p>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                We are delighted to inform you that <strong>${businessName}</strong> has successfully completed our business verification process and has been approved and activated on the SurplusX platform. 🎉
+              </p>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Your business account is now officially active, and you can start using SurplusX to list your surplus food, connect with customers and organizations, and contribute towards reducing food waste.
+              </p>
+              <p style="margin:0 0 20px 0; color:#334155; font-size:14px; line-height:1.6;">
+                We're excited to have you as part of the SurplusX community! 🌱<br>
+                <em>Together, let's Rescue Surplus. Create Impact.</em>
+              </p>
+              <div style="text-align:center; margin:28px 0;">
+                <a href="${targetDashboardUrl}" style="background-color:#047857; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:12px; font-weight:700; font-size:14px; inline-block; box-shadow:0 2px 4px rgba(4,120,87,0.2);">
+                  Open Business Dashboard
+                </a>
+              </div>
+              <div style="background-color:#f1f5f9; border-radius:12px; padding:16px; margin-top:24px;">
+                <p style="margin:0; color:#475569; font-size:13px; line-height:1.5;">
+                  If you have any questions or need assistance, our support team is always here to help.<br>
+                  <strong>Support Email:</strong> <a href="mailto:surplusx.support@gmail.com" style="color:#047857; font-weight:600;">surplusx.support@gmail.com</a>
+                </p>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8fafc; padding:20px 32px; border-top:1px solid #e2e8f0; text-align:center;">
+              <p style="margin:0 0 4px 0; color:#64748b; font-size:12px; font-weight:600;">Warm regards,<br>Team SurplusX</p>
+              <p style="margin:4px 0 0 0; color:#94a3b8; font-size:11px;">Rescue Surplus. Create Impact. &bull; &copy; 2026 SurplusX. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    return this.sendEmail({
+      to: email,
+      from: 'surplusx.support@gmail.com',
+      fromName: 'SurplusX',
+      replyTo: 'surplusx.support@gmail.com',
+      subject,
+      text,
+      html,
+    });
+  }
+
+  /**
+   * 8. Business Verification Rejection Email Notification
+   */
+  public async sendBusinessVerificationRejectionEmail(
+    email: string,
+    businessName: string,
+    contactName: string,
+    rejectionReason: string
+  ): Promise<SendEmailResult> {
+    const subject = 'Update on Your SurplusX Business Verification';
+    const text = `Hello ${contactName || 'Valued Business Partner'},\n\n` +
+      `Thank you for submitting your business verification for ${businessName}.\n\n` +
+      `After careful review by our Super Admin team, we regret to inform you that your business verification request could not be approved at this time.\n\n` +
+      `Reason for Rejection:\n${rejectionReason}\n\n` +
+      `If you believe this decision was made in error or if you have any questions regarding your application, please reach out to our support team at surplusx.support@gmail.com.\n\n` +
+      `Warm regards,\nTeam SurplusX\nRescue Surplus. Create Impact.\n\n` +
+      `© 2026 SurplusX. All rights reserved.`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SurplusX Business Verification Update</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f8fafc; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc; padding:36px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:560px; background-color:#ffffff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+          <tr>
+            <td style="background-color:#1e293b; padding:28px 32px; text-align:left;">
+              <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:800; letter-spacing:-0.5px;">SurplusX</h1>
+              <p style="margin:4px 0 0 0; color:#cbd5e1; font-size:13px; font-weight:500;">Rescue Surplus. Create Impact.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 16px 0; color:#0f172a; font-size:18px; font-weight:700;">Update on Your SurplusX Business Verification</h2>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Hello <strong>${contactName || 'Valued Business Partner'}</strong>,
+              </p>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Thank you for submitting your business verification for <strong>${businessName}</strong>.
+              </p>
+              <p style="margin:0 0 20px 0; color:#334155; font-size:14px; line-height:1.6;">
+                After careful review by our Super Admin team, we regret to inform you that your business verification request could not be approved at this time.
+              </p>
+              <div style="background-color:#fef2f2; border-left:4px solid #ef4444; border-radius:8px; padding:16px; margin:20px 0;">
+                <div style="font-size:12px; font-weight:700; color:#991b1b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Reason for Rejection</div>
+                <div style="color:#7f1d1d; font-size:14px; line-height:1.5;">${rejectionReason}</div>
+              </div>
+              <p style="margin:20px 0 0 0; color:#475569; font-size:13px; line-height:1.6;">
+                If you believe this decision was made in error or if you have any questions regarding your application, please reach out to our support team at <a href="mailto:surplusx.support@gmail.com" style="color:#047857; font-weight:600;">surplusx.support@gmail.com</a>.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8fafc; padding:20px 32px; border-top:1px solid #e2e8f0; text-align:center;">
+              <p style="margin:0 0 4px 0; color:#64748b; font-size:12px; font-weight:600;">Warm regards,<br>Team SurplusX</p>
+              <p style="margin:4px 0 0 0; color:#94a3b8; font-size:11px;">Rescue Surplus. Create Impact. &bull; &copy; 2026 SurplusX. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    return this.sendEmail({
+      to: email,
+      from: 'surplusx.support@gmail.com',
+      fromName: 'SurplusX',
+      replyTo: 'surplusx.support@gmail.com',
+      subject,
+      text,
+      html,
+    });
+  }
+
+  /**
+   * 9. Business Verification Resubmission Required Email Notification
+   */
+  public async sendBusinessVerificationResubmissionEmail(
+    email: string,
+    businessName: string,
+    contactName: string,
+    resubmissionReason: string,
+    verificationUrl?: string
+  ): Promise<SendEmailResult> {
+    const targetUrl = verificationUrl || `${process.env.APP_URL || 'http://localhost:3000'}/dashboard?view=business-verification`;
+    const subject = 'Action Required: Resubmit Your SurplusX Business Verification';
+    const text = `Hello ${contactName || 'Valued Business Partner'},\n\n` +
+      `Thank you for submitting your business verification for ${businessName}.\n\n` +
+      `Our Super Admin team has reviewed your application and requires you to resubmit or update specific document(s) before your business can be approved.\n\n` +
+      `Reason / Action Required:\n${resubmissionReason}\n\n` +
+      `Please log into your SurplusX account, navigate to the Business Verification section, and upload the updated document(s):\n${targetUrl}\n\n` +
+      `If you have any questions or need assistance, please contact us at surplusx.support@gmail.com.\n\n` +
+      `Warm regards,\nTeam SurplusX\nRescue Surplus. Create Impact.\n\n` +
+      `© 2026 SurplusX. All rights reserved.`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SurplusX Business Verification Action Required</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f8fafc; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc; padding:36px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:560px; background-color:#ffffff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+          <tr>
+            <td style="background-color:#d97706; padding:28px 32px; text-align:left;">
+              <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:800; letter-spacing:-0.5px;">SurplusX</h1>
+              <p style="margin:4px 0 0 0; color:#fef3c7; font-size:13px; font-weight:500;">Rescue Surplus. Create Impact.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 16px 0; color:#0f172a; font-size:18px; font-weight:700;">Action Required: Resubmit Your Business Verification</h2>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Hello <strong>${contactName || 'Valued Business Partner'}</strong>,
+              </p>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Thank you for submitting your business verification for <strong>${businessName}</strong>.
+              </p>
+              <p style="margin:0 0 16px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Our Super Admin team has reviewed your application and requires you to resubmit or update specific document(s) before your business can be approved.
+              </p>
+              <div style="background-color:#fffbeb; border-left:4px solid #f59e0b; border-radius:8px; padding:16px; margin:20px 0;">
+                <div style="font-size:12px; font-weight:700; color:#92400e; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Reason / Action Required</div>
+                <div style="color:#78350f; font-size:14px; line-height:1.5;">${resubmissionReason}</div>
+              </div>
+              <p style="margin:0 0 24px 0; color:#334155; font-size:14px; line-height:1.6;">
+                Please log into your SurplusX account, navigate to the Business Verification section, and upload the updated document(s).
+              </p>
+              <div style="text-align:center; margin:28px 0;">
+                <a href="${targetUrl}" style="background-color:#d97706; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:12px; font-weight:700; font-size:14px; inline-block; box-shadow:0 2px 4px rgba(217,119,6,0.2);">
+                  Review &amp; Resubmit Verification
+                </a>
+              </div>
+              <p style="margin:20px 0 0 0; color:#475569; font-size:13px; line-height:1.6;">
+                If you have any questions or need assistance, please contact us at <a href="mailto:surplusx.support@gmail.com" style="color:#047857; font-weight:600;">surplusx.support@gmail.com</a>.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8fafc; padding:20px 32px; border-top:1px solid #e2e8f0; text-align:center;">
+              <p style="margin:0 0 4px 0; color:#64748b; font-size:12px; font-weight:600;">Warm regards,<br>Team SurplusX</p>
+              <p style="margin:4px 0 0 0; color:#94a3b8; font-size:11px;">Rescue Surplus. Create Impact. &bull; &copy; 2026 SurplusX. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    return this.sendEmail({
+      to: email,
+      from: 'surplusx.support@gmail.com',
+      fromName: 'SurplusX',
+      replyTo: 'surplusx.support@gmail.com',
+      subject,
+      text,
+      html,
+    });
+  }
 }
 
 export const emailService = EmailService.getInstance();

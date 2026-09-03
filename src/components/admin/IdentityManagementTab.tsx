@@ -87,7 +87,7 @@ export const IdentityManagementTab: React.FC = () => {
   };
 
   // Filtered accounts
-  const filteredUsers = allUsers.filter((user) => {
+  const filteredUsers = (allUsers || []).filter((user) => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -204,7 +204,7 @@ export const IdentityManagementTab: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-800">
           <div className="bg-slate-800/60 p-3 rounded-2xl border border-slate-700/60">
             <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Registered Accounts</div>
-            <div className="text-2xl font-extrabold text-white mt-1">{allUsers.length}</div>
+            <div className="text-2xl font-extrabold text-white mt-1">{(allUsers || []).length}</div>
             <div className="text-[10px] text-emerald-400 flex items-center gap-1 mt-0.5">
               <CheckCircle2 className="w-3 h-3" />
               <span>100% Unique Emails</span>
@@ -213,7 +213,7 @@ export const IdentityManagementTab: React.FC = () => {
 
           <div className="bg-slate-800/60 p-3 rounded-2xl border border-slate-700/60">
             <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Indian Mobile Numbers</div>
-            <div className="text-2xl font-extrabold text-white mt-1">{allUsers.length}</div>
+            <div className="text-2xl font-extrabold text-white mt-1">{(allUsers || []).length}</div>
             <div className="text-[10px] text-emerald-400 flex items-center gap-1 mt-0.5">
               <CheckCircle2 className="w-3 h-3" />
               <span>+91 E.164 Unique</span>
@@ -231,7 +231,7 @@ export const IdentityManagementTab: React.FC = () => {
 
           <div className="bg-slate-800/60 p-3 rounded-2xl border border-slate-700/60">
             <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Admin Role Migrations</div>
-            <div className="text-2xl font-extrabold text-amber-400 mt-1">{roleAuditLogs.length}</div>
+            <div className="text-2xl font-extrabold text-amber-400 mt-1">{(roleAuditLogs || []).length}</div>
             <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
               <History className="w-3 h-3 text-amber-400" />
               <span>Audited Records</span>
@@ -261,7 +261,7 @@ export const IdentityManagementTab: React.FC = () => {
             onChange={(e) => setRoleFilter(e.target.value)}
             className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 font-bold text-slate-800 outline-hidden cursor-pointer"
           >
-            <option value="ALL">All Roles ({allUsers.length})</option>
+            <option value="ALL">All Roles ({(allUsers || []).length})</option>
             <option value="CONSUMER">Consumers</option>
             <option value="BUSINESS">Businesses</option>
             <option value="NGO">NGO Partners</option>
@@ -280,7 +280,7 @@ export const IdentityManagementTab: React.FC = () => {
               SurplusX Registered Identity Registry
             </h4>
             <p className="text-xs text-slate-500">
-              Showing {filteredUsers.length} verified accounts with immutable primary roles.
+              Showing {(filteredUsers || []).length} verified accounts with immutable primary roles.
             </p>
           </div>
         </div>
@@ -298,14 +298,14 @@ export const IdentityManagementTab: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {filteredUsers.length === 0 ? (
+              {(filteredUsers || []).length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400">
                     No accounts matching search criteria.
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                (filteredUsers || []).map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2.5">
@@ -421,17 +421,17 @@ export const IdentityManagementTab: React.FC = () => {
             </div>
           </div>
           <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-            {roleAuditLogs.length} Logged Migrations
+            {(roleAuditLogs || []).length} Logged Migrations
           </span>
         </div>
 
-        {roleAuditLogs.length === 0 ? (
+        {(roleAuditLogs || []).length === 0 ? (
           <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 text-xs">
             No administrative role changes executed yet. All accounts are running on their initial verified registration roles.
           </div>
         ) : (
           <div className="space-y-3">
-            {roleAuditLogs.map((log) => (
+            {(roleAuditLogs || []).map((log) => (
               <div
                 key={log.id}
                 className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/90 text-xs space-y-2 hover:bg-slate-50 transition-colors"

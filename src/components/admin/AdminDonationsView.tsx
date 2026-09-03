@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 
 export const AdminDonationsView: React.FC = () => {
   const { donations } = useApp();
+  const safeDonations = donations || [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -17,7 +18,7 @@ export const AdminDonationsView: React.FC = () => {
           </p>
         </div>
         <div className="px-3 py-2 bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200">
-          Total Donations: {donations.length}
+          Total Donations: {safeDonations.length}
         </div>
       </div>
 
@@ -32,14 +33,14 @@ export const AdminDonationsView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-            {donations.length === 0 ? (
+            {safeDonations.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-12 text-center text-slate-400">
                   No donations recorded.
                 </td>
               </tr>
             ) : (
-              donations.map((d) => (
+              safeDonations.map((d) => (
                 <tr key={d.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3.5 px-6 font-semibold text-slate-900">{d.title}</td>
                   <td className="py-3.5 px-6 font-medium text-slate-800">{d.donorName}</td>

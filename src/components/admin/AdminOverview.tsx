@@ -38,45 +38,52 @@ export const AdminOverview: React.FC = () => {
     setActiveView,
   } = useApp();
 
-  // Real Metric calculations from DB
-  const totalUsersCount = allUsers.length;
-  const consumersCount = allUsers.filter((u) => u.role === 'CONSUMER').length;
-  const businessUsersCount = allUsers.filter((u) => u.role === 'BUSINESS').length;
-  const ngoUsersCount = allUsers.filter((u) => u.role === 'NGO').length;
-  const ridersCount = allUsers.filter((u) => u.role === 'RIDER').length;
-  const adminsCount = allUsers.filter((u) => u.role === 'ADMIN').length;
-  const superAdminsCount = allUsers.filter((u) => u.role === 'SUPER_ADMIN').length;
+  const safeUsers = allUsers || [];
+  const safeListings = listings || [];
+  const safeOrders = orders || [];
+  const safeDonations = donations || [];
+  const safeAuditLogs = auditLogs || [];
+  const safeNgos = ngos || [];
 
-  const activeListingsCount = listings.filter((l) => l.status === 'ACTIVE').length;
-  const activeOrdersCount = orders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
-  const pendingReservationsCount = orders.filter((o) => o.status === 'RESERVED').length;
+  // Real Metric calculations from DB
+  const totalUsersCount = safeUsers.length;
+  const consumersCount = safeUsers.filter((u) => u.role === 'CONSUMER').length;
+  const businessUsersCount = safeUsers.filter((u) => u.role === 'BUSINESS').length;
+  const ngoUsersCount = safeUsers.filter((u) => u.role === 'NGO').length;
+  const ridersCount = safeUsers.filter((u) => u.role === 'RIDER').length;
+  const adminsCount = safeUsers.filter((u) => u.role === 'ADMIN').length;
+  const superAdminsCount = safeUsers.filter((u) => u.role === 'SUPER_ADMIN').length;
+
+  const activeListingsCount = safeListings.filter((l) => l.status === 'ACTIVE').length;
+  const activeOrdersCount = safeOrders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
+  const pendingReservationsCount = safeOrders.filter((o) => o.status === 'RESERVED').length;
   const activeDeliveriesCount = activeDelivery ? 1 : 0;
 
   // Revenue calculation from orders
-  const grossOrderValue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const grossOrderValue = safeOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
   const platformFees = grossOrderValue * 0.05; // 5% platform take rate
   const netRevenue = platformFees;
 
   // Order state breakdown
   const orderStates = {
-    PENDING: orders.filter((o) => o.status === 'PENDING').length,
-    RESERVED: orders.filter((o) => o.status === 'RESERVED').length,
-    CONFIRMED: orders.filter((o) => o.status === 'CONFIRMED').length,
-    READY: orders.filter((o) => o.status === 'READY').length,
-    PICKED_UP: orders.filter((o) => o.status === 'PICKED_UP').length,
-    IN_DELIVERY: orders.filter((o) => o.status === 'IN_DELIVERY').length,
-    COMPLETED: orders.filter((o) => o.status === 'COMPLETED').length,
-    CANCELLED: orders.filter((o) => o.status === 'CANCELLED').length,
-    EXPIRED: orders.filter((o) => o.status === 'EXPIRED').length,
+    PENDING: safeOrders.filter((o) => o.status === 'PENDING').length,
+    RESERVED: safeOrders.filter((o) => o.status === 'RESERVED').length,
+    CONFIRMED: safeOrders.filter((o) => o.status === 'CONFIRMED').length,
+    READY: safeOrders.filter((o) => o.status === 'READY').length,
+    PICKED_UP: safeOrders.filter((o) => o.status === 'PICKED_UP').length,
+    IN_DELIVERY: safeOrders.filter((o) => o.status === 'IN_DELIVERY').length,
+    COMPLETED: safeOrders.filter((o) => o.status === 'COMPLETED').length,
+    CANCELLED: safeOrders.filter((o) => o.status === 'CANCELLED').length,
+    EXPIRED: safeOrders.filter((o) => o.status === 'EXPIRED').length,
   };
 
   // Donation state breakdown
   const donationStates = {
-    AVAILABLE: donations.filter((d) => d.status === 'AVAILABLE').length,
-    MATCHED: donations.filter((d) => d.status === 'MATCHED').length,
-    ACCEPTED: donations.filter((d) => d.status === 'ACCEPTED').length,
-    PICKUP_PENDING: donations.filter((d) => d.status === 'PICKUP_PENDING').length,
-    DELIVERED: donations.filter((d) => d.status === 'DELIVERED').length,
+    AVAILABLE: safeDonations.filter((d) => d.status === 'AVAILABLE').length,
+    MATCHED: safeDonations.filter((d) => d.status === 'MATCHED').length,
+    ACCEPTED: safeDonations.filter((d) => d.status === 'ACCEPTED').length,
+    PICKUP_PENDING: safeDonations.filter((d) => d.status === 'PICKUP_PENDING').length,
+    DELIVERED: safeDonations.filter((d) => d.status === 'DELIVERED').length,
   };
 
   return (
@@ -162,7 +169,7 @@ export const AdminOverview: React.FC = () => {
           {
             title: 'NGO Partners',
             value: ngoUsersCount,
-            sub: `${ngos.length} registered orgs`,
+            sub: `${safeNgos.length} registered orgs`,
             icon: HeartHandshake,
             color: 'text-amber-600',
             bg: 'bg-amber-50',
@@ -273,7 +280,7 @@ export const AdminOverview: React.FC = () => {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-100 text-[11px] text-slate-500 flex justify-between">
-            <span>Total Orders: {orders.length}</span>
+            <span>Total Orders: {(orders || []).length}</span>
             <span className="text-emerald-600 font-bold">100% Synced</span>
           </div>
         </div>
@@ -311,7 +318,7 @@ export const AdminOverview: React.FC = () => {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-100 text-[11px] text-slate-500 flex justify-between">
-            <span>Total Donations: {donations.length}</span>
+            <span>Total Donations: {(donations || []).length}</span>
             <span className="text-purple-600 font-bold">Active Matchmaker</span>
           </div>
         </div>
@@ -367,7 +374,7 @@ export const AdminOverview: React.FC = () => {
         </div>
 
         <div className="divide-y divide-slate-100 overflow-hidden">
-          {auditLogs.length === 0 ? (
+          {(auditLogs || []).length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400">No recent audit events recorded.</div>
           ) : (
             auditLogs.slice(0, 5).map((log) => (

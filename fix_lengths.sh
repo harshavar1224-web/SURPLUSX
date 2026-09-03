@@ -1,0 +1,20 @@
+for file in src/components/admin/*.tsx; do
+  # Replace array.length with (array || []).length for common arrays
+  sed -i -E 's/allUsers\.length/(allUsers || []).length/g' "$file"
+  sed -i -E 's/businesses\.length/(businesses || []).length/g' "$file"
+  sed -i -E 's/ngos\.length/(ngos || []).length/g' "$file"
+  sed -i -E 's/donations\.length/(donations || []).length/g' "$file"
+  sed -i -E 's/orders\.length/(orders || []).length/g' "$file"
+  sed -i -E 's/listings\.length/(listings || []).length/g' "$file"
+  sed -i -E 's/auditLogs\.length/(auditLogs || []).length/g' "$file"
+  sed -i -E 's/ledgers\.length/(ledgers || []).length/g' "$file"
+  sed -i -E 's/settlements\.length/(settlements || []).length/g' "$file"
+  sed -i -E 's/unreadNotifs\.length/(unreadNotifs || []).length/g' "$file"
+  sed -i -E 's/notifications\.length/(notifications || []).length/g' "$file"
+  sed -i -E 's/roleAuditLogs\.length/(roleAuditLogs || []).length/g' "$file"
+  sed -i -E 's/filteredUsers\.length/(filteredUsers || []).length/g' "$file"
+  sed -i -E 's/reservations\.length/(reservations || []).length/g' "$file"
+  sed -i -E 's/radiusAuditLogs\.length/(radiusAuditLogs || []).length/g' "$file"
+  sed -i -E 's/filteredBusinesses\.length/(filteredBusinesses || []).length/g' "$file"
+  sed -i -E 's/filteredNgos\.length/(filteredNgos || []).length/g' "$file"
+done

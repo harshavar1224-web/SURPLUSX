@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 
 export const AdminOrdersView: React.FC = () => {
   const { orders } = useApp();
+  const safeOrders = orders || [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -17,7 +18,7 @@ export const AdminOrdersView: React.FC = () => {
           </p>
         </div>
         <div className="px-3 py-2 bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200">
-          Total Orders: {orders.length}
+          Total Orders: {safeOrders.length}
         </div>
       </div>
 
@@ -33,14 +34,14 @@ export const AdminOrdersView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-            {orders.length === 0 ? (
+            {safeOrders.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-12 text-center text-slate-400">
                   No orders recorded in the system.
                 </td>
               </tr>
             ) : (
-              orders.map((o) => (
+              safeOrders.map((o) => (
                 <tr key={o.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3.5 px-6 font-mono font-bold text-slate-900">{o.id}</td>
                   <td className="py-3.5 px-6 font-semibold text-slate-800">{o.consumerName || 'Consumer'}</td>

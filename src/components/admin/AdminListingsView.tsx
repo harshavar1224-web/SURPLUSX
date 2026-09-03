@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ShoppingBag, Search, Trash2, Tag, IndianRupee, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { calculateHaversineDistance } from '../../utils/serviceability';
 
 export const AdminListingsView: React.FC = () => {
   const { 
@@ -11,19 +12,21 @@ export const AdminListingsView: React.FC = () => {
     addAuditLog, 
     currentUser, 
     fetchListings, 
-    userLocation, 
-    calculateHaversineDistanceKm 
+    userLocation 
   } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [listingToDelete, setListingToDelete] = useState<{ id: string; title: string; category: string; quantity: number; price: number; status: string } | null>(null);
 
-  const filtered = listings.filter((l) =>
+  const safeListings = listings || [];
+  const safeOrders = orders || [];
+
+  const filtered = safeListings.filter((l) =>
     l.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     l.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const activeOrderForListing = listingToDelete ? orders?.find(o => 
+  const activeOrderForListing = listingToDelete ? safeOrders.find(o => 
     o.items?.some((i: any) => i.listingId === listingToDelete.id) && 
     o.status !== 'COMPLETED' && 
     o.status !== 'CANCELLED'
@@ -65,7 +68,11 @@ export const AdminListingsView: React.FC = () => {
         } else if (res.status === 409) {
           throw new Error(data?.error || 'This listing cannot be removed because it has active transactions.');
         } else if (res.status === 404) {
-          throw new Error('Listing was not found or already deleted.');
+          setListings(safeListings.filter(l => l.id !== listingToDelete.id));
+          triggerToast('Listing was already removed or not found. List updated.', 'info');
+          setListingToDelete(null);
+          setIsProcessing(false);
+          return;
         } else {
           throw new Error(data?.error || 'Failed to delete listing.');
         }
@@ -83,7 +90,7 @@ export const AdminListingsView: React.FC = () => {
       if (data && data.listings) {
         const mappedListings = data.listings.map((l: any) => ({
           ...l,
-          distanceKm: calculateHaversineDistanceKm(
+          distanceKm: calculateHaversineDistance(
             userLocation?.latitude || 12.9716,
             userLocation?.longitude || 77.5946,
             l.coordinates?.lat || 12.9716,
@@ -116,7 +123,7 @@ export const AdminListingsView: React.FC = () => {
           </p>
         </div>
         <div className="px-3 py-2 bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200">
-          Total Listings: {listings.length}
+          Total Listings: {safeListings.length}
         </div>
       </div>
 

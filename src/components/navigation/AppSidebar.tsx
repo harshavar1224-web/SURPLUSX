@@ -109,7 +109,7 @@ export const AppSidebar: React.FC = () => {
       {/* Mobile Slide-out Drawer Backdrop */}
       {isMobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
           onClick={() => setIsMobileSidebarOpen(false)}
         />
       )}
@@ -117,12 +117,10 @@ export const AppSidebar: React.FC = () => {
       {/* Main Sidebar (Stationary Desktop + Slide-out Mobile) */}
       <aside
         id="app-sidebar-nav"
-        className={`fixed lg:static top-0 left-0 h-full bg-white border-r border-slate-200/80 shadow-xs z-50 lg:z-10 transition-all duration-300 flex flex-col justify-between select-none shrink-0 ${
-          isSidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
-        } ${
+        className={`bg-white border-r border-slate-200/80 shadow-xs transition-all duration-300 flex flex-col justify-between select-none shrink-0 w-full h-full fixed md:static top-0 left-0 z-50 md:z-10 ${
           isMobileSidebarOpen
             ? 'translate-x-0 w-72'
-            : '-translate-x-full lg:translate-x-0'
+            : '-translate-x-full md:translate-x-0'
         }`}
       >
         {/* Top Header & Collapse Toggle */}
@@ -133,7 +131,7 @@ export const AppSidebar: React.FC = () => {
 
           <button
             onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="hidden md:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-label="Toggle Sidebar"
           >
@@ -146,7 +144,7 @@ export const AppSidebar: React.FC = () => {
         </div>
 
         {/* Navigation Item List: Independently Scrollable */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4 custom-scrollbar pb-24">
           {/* Role Indicator Banner */}
           {!isSidebarCollapsed && currentUser && (
             <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/60 mb-2">

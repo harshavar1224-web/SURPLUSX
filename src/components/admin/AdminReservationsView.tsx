@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 
 export const AdminReservationsView: React.FC = () => {
   const { orders } = useApp();
-  const reservations = orders.filter((o) => o.status === 'RESERVED');
+  const reservations = (orders || []).filter((o) => o.status === 'RESERVED');
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -18,7 +18,7 @@ export const AdminReservationsView: React.FC = () => {
           </p>
         </div>
         <div className="px-3 py-2 bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200">
-          Active Holds: {reservations.length}
+          Active Holds: {(reservations || []).length}
         </div>
       </div>
 
@@ -33,14 +33,14 @@ export const AdminReservationsView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-            {reservations.length === 0 ? (
+            {(reservations || []).length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-12 text-center text-slate-400">
                   No active consumer reservations.
                 </td>
               </tr>
             ) : (
-              reservations.map((r) => (
+              (reservations || []).map((r) => (
                 <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3.5 px-6 font-mono font-bold text-slate-900">{r.id}</td>
                   <td className="py-3.5 px-6 font-semibold text-slate-800">{r.consumerName || 'Consumer'}</td>

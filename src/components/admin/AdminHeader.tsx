@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   ShieldAlert, 
   Search, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SurplusXLogo } from '../SurplusXLogo';
+import { useOutsideClick } from '../../hooks/useOutsideClick';
 
 export const AdminHeader: React.FC = () => {
   const {
@@ -29,49 +30,55 @@ export const AdminHeader: React.FC = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
-  const unreadNotifs = notifications.filter((n) => !n.read);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useOutsideClick(notifRef, () => setIsNotifOpen(false), isNotifOpen);
+  useOutsideClick(profileRef, () => setIsProfileOpen(false), isProfileOpen);
+
+  const unreadNotifs = (notifications || []).filter((n) => !n.read);
 
   return (
-    <header className="shrink-0 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 lg:px-8 flex items-center justify-between shadow-xs z-30">
-      {/* Left: Mobile Toggle & Brand / Context */}
-      <div className="flex items-center gap-4">
+    <header className="shrink-0 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 lg:px-8 grid grid-cols-3 items-center shadow-xs z-30 w-full">
+      {/* Left: Mobile Toggle & Logo */}
+      <div className="flex items-center gap-4 justify-start">
         <button
           onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-          className="lg:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+          className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           aria-label="Toggle Navigation"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex">
-            <SurplusXLogo size="sm" showWordmark={false} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-slate-900 tracking-tight">
-                Platform Command Center
-              </h1>
-              <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                {currentUser?.role === 'SUPER_ADMIN' ? 'SUPER ADMIN' : 'ADMINISTRATOR'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Systems Operational
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1 text-slate-600">
-                <MapPin className="w-3 h-3 text-slate-400" /> Platform-wide (India HQ)
-              </span>
-            </p>
-          </div>
+        <div className="hidden sm:flex">
+          <SurplusXLogo size="sm" showWordmark={false} />
         </div>
       </div>
 
+      {/* Center: Brand / Context */}
+      <div className="text-center justify-self-center">
+        <div className="flex items-center justify-center gap-2">
+          <h1 className="text-base font-bold text-slate-900 tracking-tight">
+            Platform Command Center
+          </h1>
+          <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+            {currentUser?.role === 'SUPER_ADMIN' ? 'SUPER ADMIN' : 'ADMINISTRATOR'}
+          </span>
+        </div>
+        <p className="text-xs text-slate-500 flex items-center justify-center gap-2">
+          <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Systems Operational
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1 text-slate-600">
+            <MapPin className="w-3 h-3 text-slate-400" /> Platform-wide (India HQ)
+          </span>
+        </p>
+      </div>
+
       {/* Right: Global Search, System Health, Notifications, Profile */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 justify-end">
         {/* System Health Indicators */}
         <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-medium text-slate-600">
           <Database className="w-3.5 h-3.5 text-emerald-600" />
@@ -82,7 +89,7 @@ export const AdminHeader: React.FC = () => {
         </div>
 
         {/* Notifications Dropdown */}
-        <div className="relative">
+        <div className="relative" ref={notifRef}>
           <button
             onClick={() => {
               setIsNotifOpen(!isNotifOpen);
@@ -92,9 +99,9 @@ export const AdminHeader: React.FC = () => {
             title="Platform Notifications"
           >
             <Bell className="w-5 h-5" />
-            {unreadNotifs.length > 0 && (
+            {(unreadNotifs || []).length > 0 && (
               <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white font-bold text-[10px] flex items-center justify-center ring-2 ring-white">
-                {unreadNotifs.length}
+                {(unreadNotifs || []).length}
               </span>
             )}
           </button>
@@ -104,11 +111,11 @@ export const AdminHeader: React.FC = () => {
               <div className="px-4 pb-2 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Platform Alerts</h3>
                 <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
-                  {unreadNotifs.length} Unread
+                  {(unreadNotifs || []).length} Unread
                 </span>
               </div>
               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-                {notifications.length === 0 ? (
+                {(notifications || []).length === 0 ? (
                   <div className="p-6 text-center text-xs text-slate-400">No active platform notifications.</div>
                 ) : (
                   notifications.slice(0, 5).map((n) => (
@@ -126,7 +133,7 @@ export const AdminHeader: React.FC = () => {
                     setActiveView('notifications');
                     setIsNotifOpen(false);
                   }}
-                  className="text-xs font-bold text-purple-600 hover:text-purple-700"
+                  className="text-xs font-bold text-purple-600 hover:text-purple-700 cursor-pointer"
                 >
                   View All Notifications →
                 </button>
@@ -136,7 +143,7 @@ export const AdminHeader: React.FC = () => {
         </div>
 
         {/* Profile / Admin Menu */}
-        <div className="relative">
+        <div className="relative" ref={profileRef}>
           <button
             onClick={() => {
               setIsProfileOpen(!isProfileOpen);
@@ -159,7 +166,7 @@ export const AdminHeader: React.FC = () => {
           </button>
 
           {isProfileOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50">
               <div className="px-4 py-2 border-b border-slate-100">
                 <p className="text-xs font-bold text-slate-900 truncate">{currentUser?.name}</p>
                 <p className="text-[11px] text-slate-500 truncate">{currentUser?.email}</p>
@@ -171,7 +178,7 @@ export const AdminHeader: React.FC = () => {
                     setActiveView('profile');
                     setIsProfileOpen(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                 >
                   <User className="w-4 h-4 text-slate-400" /> My Profile & Security
                 </button>
@@ -180,7 +187,7 @@ export const AdminHeader: React.FC = () => {
                     setActiveView('system-settings');
                     setIsProfileOpen(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                 >
                   <Settings className="w-4 h-4 text-slate-400" /> System Settings
                 </button>
@@ -190,7 +197,7 @@ export const AdminHeader: React.FC = () => {
                       setActiveView('administrators');
                       setIsProfileOpen(false);
                     }}
-                    className="w-full text-left px-4 py-2 text-xs font-medium text-purple-700 hover:bg-purple-50 flex items-center gap-2 font-semibold"
+                    className="w-full text-left px-4 py-2 text-xs font-medium text-purple-700 hover:bg-purple-50 flex items-center gap-2 font-semibold cursor-pointer"
                   >
                     <ShieldCheck className="w-4 h-4 text-purple-600" /> Admin Management
                   </button>

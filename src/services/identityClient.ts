@@ -373,6 +373,70 @@ export async function verifyPhoneOTPApi(params: {
   }
 }
 
+export async function sendPhoneVoiceOtpApi(params: {
+  phone: string;
+  purpose?: OTPPurpose;
+  deviceId?: string;
+}): Promise<{
+  success: boolean;
+  status?: string;
+  sessionId?: string;
+  verificationSessionId?: string;
+  normalizedPhone?: string;
+  expiresInSeconds?: number;
+  resendAvailableInSeconds?: number;
+  maskedPhone?: string;
+  deliveryMethod?: 'VOICE_CALL';
+  error?: string;
+  code?: string;
+}> {
+  try {
+    const res = await fetch('/api/auth/phone/send-voice-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Network error while dispatching verification call.',
+    };
+  }
+}
+
+export async function verifyPhoneVoiceOtpApi(params: {
+  sessionId?: string;
+  verificationSessionId?: string;
+  phone: string;
+  otpCode?: string;
+  otp?: string;
+  purpose?: OTPPurpose;
+}): Promise<{
+  success: boolean;
+  status?: string;
+  verificationToken?: string;
+  normalizedPhone?: string;
+  phoneVerification?: PhoneVerification;
+  remainingAttempts?: number;
+  error?: string;
+  code?: string;
+}> {
+  try {
+    const res = await fetch('/api/auth/phone/verify-voice-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Network error while verifying voice call OTP.',
+    };
+  }
+}
+
 export async function requestPhoneChangeApi(params: {
   userId: string;
   newPhone: string;
@@ -433,7 +497,7 @@ export async function signupApi(params: {
   city?: string;
   organizationName?: string;
   deviceId?: string;
-}): Promise<{ success: boolean; user?: User; error?: string; code?: string; existingRole?: UserRole }> {
+}): Promise<{ success: boolean; user?: User; error?: string; code?: string; existingRole?: UserRole; sessionToken?: string }> {
   try {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
@@ -519,6 +583,7 @@ export async function loginApi(params: {
   error?: string;
   isDeviceMismatch?: boolean;
   registeredDeviceId?: string;
+  sessionToken?: string;
 }> {
   try {
     const res = await fetch('/api/auth/login', {

@@ -5,7 +5,7 @@ import { useApp } from '../../context/AppContext';
 export const AdminAdministratorsView: React.FC = () => {
   const { allUsers, currentUser, triggerToast, addAuditLog } = useApp();
 
-  const admins = allUsers.filter((u) => u.role === 'ADMIN' || u.role === 'SUPER_ADMIN');
+  const admins = (allUsers || []).filter((u) => u.role === 'ADMIN' || u.role === 'SUPER_ADMIN');
 
   const handleCreateAdmin = () => {
     triggerToast('New administrator account creation prompt initiated.', 'success');

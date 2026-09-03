@@ -107,6 +107,7 @@ interface AppContextType {
   setPendingIntent: (intent: PendingActionIntent | null) => void;
   activeView: string;
   setActiveView: (view: string) => void;
+  authLoading: boolean;
   selectedCity: string;
   setSelectedCity: (city: string) => void;
 
@@ -231,6 +232,8 @@ interface AppContextType {
   setIsSidebarCollapsed: (collapsed: boolean | ((prev: boolean) => boolean)) => void;
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  sidebarWidth: number;
+  setSidebarWidth: (width: number) => void;
 
   // Saved Listings
   savedListingIds: string[];
@@ -267,6 +270,73 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const ADMIN_ROUTE_MAP: Record<string, string> = {
+  '/admin': 'dashboard',
+  '/admin/': 'dashboard',
+  '/admin/dashboard': 'dashboard',
+  '/admin/impact': 'impact',
+  '/admin/users': 'users',
+  '/admin/businesses': 'businesses',
+  '/admin/ngos': 'ngos',
+  '/admin/listings': 'listings',
+  '/admin/orders': 'orders',
+  '/admin/donations': 'donations',
+  '/admin/reservations': 'reservations',
+  '/admin/payments': 'payments',
+  '/admin/settlements': 'settlements',
+  '/admin/live-logistics': 'live-logistics',
+  '/admin/live-map': 'live-map',
+  '/admin/map': 'live-map',
+  '/admin/analytics': 'analytics',
+  '/admin/messages': 'messages',
+  '/admin/verification': 'verification',
+  '/admin/location-radius': 'location-settings',
+  '/admin/location-settings': 'location-settings',
+  '/admin/reports-fraud': 'reports',
+  '/admin/reports': 'reports',
+  '/admin/audit-logs': 'audit-logs',
+  '/admin/administrators': 'administrators',
+  '/admin/profile': 'profile',
+  '/admin/settings': 'system-settings',
+  '/admin/system-settings': 'system-settings',
+  '/admin/notifications': 'notifications',
+};
+
+const GENERAL_ROUTE_MAP: Record<string, string> = {
+  '/': 'landing',
+  '/explore': 'browse',
+  '/browse': 'browse',
+  '/map': 'live-map',
+  '/live-map': 'live-map',
+  '/orders': 'orders',
+  '/consumer/orders': 'orders',
+  '/business': 'dashboard',
+  '/business/dashboard': 'dashboard',
+  '/ngo': 'dashboard',
+  '/ngo/dashboard': 'dashboard',
+  '/impact': 'impact',
+  '/messages': 'messages',
+  '/profile': 'profile',
+  '/settings': 'settings',
+  '/notifications': 'notifications',
+  '/help': 'help',
+};
+
+const getInitialView = (): string => {
+  const pathname = window.location.pathname.toLowerCase().replace(/\/$/, '') || '/';
+  if (pathname.startsWith('/admin')) {
+    return ADMIN_ROUTE_MAP[pathname] || 'dashboard';
+  }
+  if (pathname === '/' || pathname === '') {
+    const token = localStorage.getItem('surplusx_session_token');
+    if (token) {
+      return 'dashboard';
+    }
+    return 'landing';
+  }
+  return GENERAL_ROUTE_MAP[pathname] || 'dashboard';
+};
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Pre-configured role personas
@@ -356,7 +426,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
+
+  // Restore Session on mount (3-month session persistence)
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const localToken = localStorage.getItem('surplusx_session_token');
+        const res = await fetch('/api/auth/me', {
+          headers: localToken ? { 'Authorization': `Bearer ${localToken}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            setCurrentUser(data.user);
+          }
+        } else {
+          localStorage.removeItem('surplusx_session_token');
+        }
+      } catch (err) {
+        console.error('Session restoration error:', err);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    restoreSession();
+  }, []);
 
   const setAdminPreviewRole = (role: UserRole | null) => {
     if (!currentUser || !isAdminRole(currentUser.role)) return;
@@ -371,7 +467,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const [activeView, setActiveView] = useState<string>('landing');
+  const [activeView, setActiveView] = useState<string>(getInitialView());
   const [pendingIntent, setPendingIntent] = useState<PendingActionIntent | null>(null);
   const [selectedCity, setSelectedCity] = useState<string>('Bangalore, India');
   const isAuthenticated = currentUser !== null;
@@ -720,6 +816,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Sidebar Controls
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const [sidebarWidth, setSidebarWidthState] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('surplusx_sidebar_width');
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 240 && parsed <= 420) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 300;
+  });
+
+  const setSidebarWidth = (width: number) => {
+    const clamped = Math.max(240, Math.min(420, width));
+    setSidebarWidthState(clamped);
+    try {
+      localStorage.setItem('surplusx_sidebar_width', clamped.toString());
+    } catch {
+      // ignore
+    }
+  };
 
   // Saved Listings
   const [savedListingIds, setSavedListingIds] = useState<string[]>(['listing-1', 'listing-4']);
@@ -1084,8 +1204,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Login handler with pending intent resumption
-  const login = async (user: User) => {
+  // Login handler with pending intent resumption & session token persistence
+  const login = async (user: User, sessionToken?: string) => {
+    if (sessionToken) {
+      localStorage.setItem('surplusx_session_token', sessionToken);
+    }
     setCurrentUser(user);
     triggerToast(`Welcome back, ${user.name}! Signed in as ${user.role}.`, 'success');
     addAuditLog(`USER_LOGIN_${user.role}`, 'AUTH', `User ${user.name} logged in (${user.email}).`);
@@ -1122,7 +1245,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    // Default view routing based on role
+    // Default view routing based on role (unless already on a valid role view)
     setActiveView(isAdminRole(user.role) ? 'admin' : 'dashboard');
   };
 
@@ -1143,7 +1266,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return { success: false, error: res.error || 'Authentication failed.' };
       }
 
-      await login(res.user);
+      await login(res.user, res.sessionToken);
 
       if (res.isDeviceMismatch) {
         setIsDeviceModalOpen(true);
@@ -1223,7 +1346,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return { success: false, error: errMsg };
       }
 
-      await login(res.user);
+      await login(res.user, res.sessionToken);
       await fetchRegisteredUsers();
       await fetchIdentityAuditLogs();
       triggerToast(`Account created successfully! Welcome to SurplusX as ${res.user.role}.`, 'success');
@@ -1287,14 +1410,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Logout handler
-  const logout = () => {
+  // Logout handler with server session invalidation
+  const logout = async () => {
     const prevName = currentUser?.name || 'User';
+    try {
+      const localToken = localStorage.getItem('surplusx_session_token');
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: localToken }),
+      });
+    } catch {}
+    localStorage.removeItem('surplusx_session_token');
     addAuditLog('USER_LOGOUT', 'AUTH', `User ${prevName} logged out.`);
     setCurrentUser(null);
     setCart([]);
     cancelReservationHold();
     setActiveView('landing');
+    window.history.pushState(null, '', '/');
     triggerToast('You have been signed out. Browsing as Guest.', 'info');
   };
 
@@ -2406,6 +2539,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setPendingIntent,
         activeView,
         setActiveView,
+        authLoading,
         selectedCity,
         setSelectedCity,
         userLocation,
@@ -2505,6 +2639,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsSidebarCollapsed,
         isMobileSidebarOpen,
         setIsMobileSidebarOpen,
+        sidebarWidth,
+        setSidebarWidth,
         savedListingIds,
         toggleSavedListing,
         threads,

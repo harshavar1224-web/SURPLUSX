@@ -3,9 +3,15 @@ import { Leaf, Award, HeartHandshake, Store, Users, TrendingUp, ShieldCheck } fr
 import { useApp } from '../../context/AppContext';
 
 export const AdminImpactView: React.FC = () => {
-  const { allUsers, businesses, ngos, orders, donations } = useApp();
+  const { allUsers, ngos, orders, donations } = useApp();
 
-  const totalFoodKg = orders.length * 2.5 + donations.length * 15;
+  const safeUsers = allUsers || [];
+  const safeOrders = orders || [];
+  const safeDonations = donations || [];
+  const safeNgos = ngos || [];
+  const businesses = safeUsers.filter(u => u.role === 'BUSINESS');
+
+  const totalFoodKg = safeOrders.length * 2.5 + safeDonations.length * 15;
   const totalMeals = Math.round(totalFoodKg * 2);
   const co2AvoidedKg = Math.round(totalFoodKg * 2.5);
   const waterSavedLiters = Math.round(totalFoodKg * 1000);
@@ -64,7 +70,7 @@ export const AdminImpactView: React.FC = () => {
               <p className="text-xs text-slate-500">Active merchant partners</p>
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-slate-900 mt-4">{businesses.length}</div>
+          <div className="text-3xl font-extrabold text-slate-900 mt-4">{(businesses || []).length}</div>
           <p className="text-xs text-slate-500 mt-1">Bakeries, restaurants, supermarkets</p>
         </div>
 
@@ -78,7 +84,7 @@ export const AdminImpactView: React.FC = () => {
               <p className="text-xs text-slate-500">Authorized food banks</p>
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-slate-900 mt-4">{ngos.length}</div>
+          <div className="text-3xl font-extrabold text-slate-900 mt-4">{safeNgos.length}</div>
           <p className="text-xs text-slate-500 mt-1">Shelters, orphanages, community kitchens</p>
         </div>
 
@@ -93,7 +99,7 @@ export const AdminImpactView: React.FC = () => {
             </div>
           </div>
           <div className="text-3xl font-extrabold text-slate-900 mt-4">
-            {allUsers.filter((u) => u.role === 'CONSUMER').length}
+            {safeUsers.filter((u) => u.role === 'CONSUMER').length}
           </div>
           <p className="text-xs text-slate-500 mt-1">Active local rescue participants</p>
         </div>

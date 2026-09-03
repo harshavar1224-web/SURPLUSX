@@ -29,7 +29,7 @@ export const AdminBusinessesView: React.FC = () => {
     fetchBusinesses();
   }, []);
 
-  const filteredBusinesses = businesses.filter((b) =>
+  const filteredBusinesses = (businesses || []).filter((b) =>
     (b.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (b.category || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -93,7 +93,7 @@ export const AdminBusinessesView: React.FC = () => {
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
           <div className="px-3 py-2 bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200">
-            Total Merchants: {businesses.length}
+            Total Merchants: {(businesses || []).length}
           </div>
         </div>
       </div>
@@ -128,14 +128,14 @@ export const AdminBusinessesView: React.FC = () => {
               <tr>
                 <td colSpan={6} className="py-12 text-center text-slate-400">Loading business merchants...</td>
               </tr>
-            ) : filteredBusinesses.length === 0 ? (
+            ) : (filteredBusinesses || []).length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-12 text-center text-slate-400">
                   No business merchants registered.
                 </td>
               </tr>
             ) : (
-              filteredBusinesses.map((b) => (
+              (filteredBusinesses || []).map((b) => (
                 <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3.5 px-6 font-semibold text-slate-900 flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">

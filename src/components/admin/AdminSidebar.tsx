@@ -22,6 +22,12 @@ import {
   Users2,
   ChevronLeft,
   ChevronRight,
+  Settings,
+  User,
+  Bell,
+  HelpCircle,
+  Ticket,
+  Award,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SurplusXLogo } from '../SurplusXLogo';
@@ -31,12 +37,12 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   view: string;
-  badgeKey?: 'orders' | 'messages' | 'donations' | 'deliveries' | 'verifications';
+  badgeKey?: 'orders' | 'messages' | 'donations' | 'deliveries' | 'verifications' | 'notifications';
   superAdminOnly?: boolean;
 }
 
 interface NavSection {
-  title: 'MAIN' | 'OPERATIONS' | 'COMMUNICATION' | 'SYSTEM' | 'ADMINISTRATION';
+  title: 'MAIN' | 'OPERATIONS' | 'COMMUNICATION' | 'SYSTEM' | 'ACCOUNT' | 'ADMINISTRATION';
   items: NavItem[];
 }
 
@@ -55,6 +61,7 @@ export const AdminSidebar: React.FC = () => {
     activeDelivery,
     businesses,
     ngos,
+    notifications,
   } = useApp();
 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
@@ -63,12 +70,13 @@ export const AdminSidebar: React.FC = () => {
 
   // Dynamic live badge values
   const unreadMessagesCount = threads ? threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0) : 0;
-  const activeOrdersCount = orders ? orders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length : 0;
-  const activeDonationsCount = donations ? donations.filter((d) => d.status === 'AVAILABLE' || d.status === 'MATCHED' || d.status === 'ACCEPTED').length : 0;
+  const unreadNotifsCount = notifications ? notifications.filter((n) => !n.read).length : 0;
+  const activeOrdersCount = orders ? (orders || []).filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length : 0;
+  const activeDonationsCount = donations ? (donations || []).filter((d) => d.status === 'AVAILABLE' || d.status === 'MATCHED' || d.status === 'ACCEPTED').length : 0;
   const activeDeliveriesCount = activeDelivery ? 1 : 0;
   const pendingVerificationsCount =
-    (businesses ? businesses.filter((b: any) => !b.isVerified).length : 0) +
-    (ngos ? ngos.filter((n: any) => !n.isVerified).length : 0);
+    (businesses ? (businesses || []).filter((b: any) => !b.isVerified).length : 0) +
+    (ngos ? (ngos || []).filter((n: any) => !n.isVerified).length : 0);
 
   const getBadgeValue = (badgeKey?: NavItem['badgeKey']) => {
     if (!badgeKey) return null;
@@ -83,6 +91,8 @@ export const AdminSidebar: React.FC = () => {
         return unreadMessagesCount > 0 ? unreadMessagesCount : null;
       case 'verifications':
         return pendingVerificationsCount > 0 ? pendingVerificationsCount : null;
+      case 'notifications':
+        return unreadNotifsCount > 0 ? unreadNotifsCount : null;
       default:
         return null;
     }
@@ -111,6 +121,8 @@ export const AdminSidebar: React.FC = () => {
         { id: 'a-logistics', label: 'Live Logistics', icon: Truck, view: 'live-logistics', badgeKey: 'deliveries' },
         { id: 'a-live-map', label: 'Live Map', icon: Navigation, view: 'live-map' },
         { id: 'a-analytics', label: 'Analytics', icon: BarChart3, view: 'analytics' },
+        { id: 'a-coupons', label: 'Coupons & Promos', icon: Ticket, view: 'coupons' },
+        { id: 'a-referrals', label: 'Referrals & Rewards', icon: Award, view: 'referrals' },
       ],
     },
     {
@@ -126,6 +138,15 @@ export const AdminSidebar: React.FC = () => {
         { id: 'a-location', label: 'Location & Radius Rules', icon: MapPin, view: 'location-settings' },
         { id: 'a-reports', label: 'Reports & Fraud', icon: ShieldAlert, view: 'reports' },
         { id: 'a-audit-logs', label: 'Audit Logs', icon: History, view: 'audit-logs' },
+        { id: 'a-settings', label: 'System Settings', icon: Settings, view: 'system-settings' },
+      ],
+    },
+    {
+      title: 'ACCOUNT',
+      items: [
+        { id: 'a-profile', label: 'My Profile', icon: User, view: 'profile' },
+        { id: 'a-notifications', label: 'Notifications', icon: Bell, view: 'notifications', badgeKey: 'notifications' },
+        { id: 'a-help', label: 'Help & Support', icon: HelpCircle, view: 'help' },
       ],
     },
     ...(isSuperAdmin
@@ -166,6 +187,9 @@ export const AdminSidebar: React.FC = () => {
     if (view === 'reports') {
       return activeView === 'reports' || activeView === 'reports-fraud';
     }
+    if (view === 'system-settings') {
+      return activeView === 'system-settings' || activeView === 'settings';
+    }
     return activeView === view;
   };
 
@@ -174,7 +198,7 @@ export const AdminSidebar: React.FC = () => {
       {/* Mobile Drawer Backdrop */}
       {isMobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
           onClick={() => setIsMobileSidebarOpen(false)}
         />
       )}
@@ -182,50 +206,20 @@ export const AdminSidebar: React.FC = () => {
       {/* Completely Stationary Desktop Sidebar & Mobile Drawer */}
       <aside
         id="admin-sidebar"
-        className={`fixed lg:static top-0 left-0 h-full bg-white border-r border-slate-200/80 shadow-xs z-50 lg:z-10 transition-all duration-300 flex flex-col justify-between select-none shrink-0 overflow-hidden ${
-          isSidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
-        } ${
+        className={`bg-white border-r border-slate-200/80 shadow-xs transition-all duration-300 flex flex-col justify-between select-none shrink-0 overflow-hidden w-full h-full fixed md:static top-0 left-0 z-50 md:z-10 ${
           isMobileSidebarOpen
             ? 'translate-x-0 w-72'
-            : '-translate-x-full lg:translate-x-0'
+            : '-translate-x-full md:translate-x-0'
         }`}
       >
-        {/* Sidebar Header with Brand & Collapse Button */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0 h-16 bg-white">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <SurplusXLogo size="sm" showWordmark={!isSidebarCollapsed} />
-          </div>
 
-          <button
-            onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label="Toggle Sidebar"
-          >
-            {isSidebarCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
-            ) : (
-              <ChevronLeft className="w-4 h-4" />
-            )}
-          </button>
-        </div>
 
         {/* Dedicated Internal Scrollable Navigation Container */}
         <div
           id="admin-sidebar-nav-container"
-          className="flex-1 overflow-y-auto px-3 py-3 space-y-4 custom-scrollbar min-h-0"
+          className="flex-1 overflow-y-auto px-3 py-3 space-y-4 custom-scrollbar min-h-0 pb-24"
         >
-          {/* Top Role Indicator */}
-          {!isSidebarCollapsed && (
-            <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200/60 mb-2 shrink-0">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-500 font-medium">Logged in role:</span>
-                <span className="px-2 py-0.5 rounded-full font-bold border bg-purple-100/80 text-purple-800 border-purple-300/60">
-                  {isSuperAdmin ? 'Platform Super Admin' : 'Platform Admin'}
-                </span>
-              </div>
-            </div>
-          )}
+
 
           {/* Categorized Navigation Sections */}
           {navSections.map((section) => (

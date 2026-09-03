@@ -6,7 +6,7 @@ export const AdminNgosView: React.FC = () => {
   const { ngos, triggerToast, addAuditLog } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredNgos = ngos.filter((n) =>
+  const filteredNgos = (ngos || []).filter((n) =>
     n.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -27,7 +27,7 @@ export const AdminNgosView: React.FC = () => {
           </p>
         </div>
         <div className="px-3 py-2 bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 border border-slate-200">
-          Total NGOs: {ngos.length}
+          Total NGOs: {(ngos || []).length}
         </div>
       </div>
 
@@ -56,14 +56,14 @@ export const AdminNgosView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-            {filteredNgos.length === 0 ? (
+            {(filteredNgos || []).length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-12 text-center text-slate-400">
                   No NGO partners registered.
                 </td>
               </tr>
             ) : (
-              filteredNgos.map((n) => (
+              (filteredNgos || []).map((n) => (
                 <tr key={n.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3.5 px-6 font-semibold text-slate-900 flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 font-bold flex items-center justify-center text-xs">

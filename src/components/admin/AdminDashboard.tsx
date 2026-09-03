@@ -202,17 +202,24 @@ export const AdminDashboard: React.FC = () => {
     addAuditLog('COMPLIANCE_REJECTED', 'VERIFICATION', `Admin rejected doc ${docId}: ${reason}`);
   };
 
-  const pendingDocs = verifications.filter((v) => v.status === 'PENDING');
-  const pendingLedgers = ledgers.filter((l) => l.settlementStatus === 'PENDING');
+  const safeUsers = allUsers || [];
+  const safeListings = listings || [];
+  const safeOrders = orders || [];
+  const safeNgos = ngos || [];
+  const safeLedgers = ledgers || [];
+  const safeVerifications = verifications || [];
+
+  const pendingDocs = safeVerifications.filter((v) => v.status === 'PENDING');
+  const pendingLedgers = safeLedgers.filter((l) => l.settlementStatus === 'PENDING');
 
   // Computed metrics
-  const totalUsersCount = allUsers.length || 12;
-  const consumersCount = allUsers.filter((u) => u.role === 'CONSUMER').length || 8;
-  const businessesCount = allUsers.filter((u) => u.role === 'BUSINESS').length || 3;
-  const ngosCount = ngos.length || 2;
-  const activeListingsCount = listings.filter((l) => l.status === 'ACTIVE').length || listings.length;
-  const activeOrdersCount = orders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || o.amount || 0), 0);
+  const totalUsersCount = safeUsers.length || 12;
+  const consumersCount = safeUsers.filter((u) => u.role === 'CONSUMER').length || 8;
+  const businessesCount = safeUsers.filter((u) => u.role === 'BUSINESS').length || 3;
+  const ngosCount = safeNgos.length || 2;
+  const activeListingsCount = safeListings.filter((l) => l.status === 'ACTIVE').length || safeListings.length;
+  const activeOrdersCount = safeOrders.filter((o) => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
+  const totalRevenue = safeOrders.reduce((sum, o) => sum + (o.totalAmount || o.amount || 0), 0);
   const platformFees = Math.round(totalRevenue * 0.08);
 
   return (
@@ -349,7 +356,7 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
               <div className="text-xs text-slate-500 font-medium">Immutable Audit Blocks</div>
-              <div className="text-2xl font-extrabold text-slate-900 mt-1">{auditLogs.length} Entries</div>
+              <div className="text-2xl font-extrabold text-slate-900 mt-1">{(auditLogs || []).length} Entries</div>
               <div className="text-[11px] text-emerald-600 font-semibold mt-1">100% Tamper-evident</div>
             </div>
           </div>
@@ -421,12 +428,12 @@ export const AdminDashboard: React.FC = () => {
               <p className="text-xs text-slate-500">Manage consumers, businesses, NGOs, and platform roles.</p>
             </div>
             <span className="px-3 py-1 bg-slate-100 text-slate-800 text-xs font-bold rounded-full">
-              {allUsers.length} Registered Accounts
+              {safeUsers.length} Registered Accounts
             </span>
           </div>
 
           <div className="space-y-3">
-            {allUsers.map((u) => (
+            {safeUsers.map((u) => (
               <div key={u.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-3">
                   <img src={u.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} className="w-10 h-10 rounded-full object-cover" alt="" />
@@ -457,8 +464,8 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-500">Manage restaurants, bakeries, supermarkets, and surplus food vendors.</p>
           </div>
           <div className="space-y-3">
-            {allUsers.filter((u) => u.role === 'BUSINESS').length > 0 ? (
-              allUsers.filter((u) => u.role === 'BUSINESS').map((b) => (
+            {safeUsers.filter((u) => u.role === 'BUSINESS').length > 0 ? (
+              safeUsers.filter((u) => u.role === 'BUSINESS').map((b) => (
                 <div key={b.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                   <div>
                     <div className="font-bold text-slate-900">{b.name} ({b.city || 'Bangalore'})</div>
@@ -482,7 +489,7 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-500">Manage verified hunger relief organizations and distribution centers.</p>
           </div>
           <div className="space-y-3">
-            {ngos.map((n) => (
+            {safeNgos.map((n) => (
               <div key={n.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                 <div>
                   <div className="font-bold text-slate-900">{n.name}</div>
@@ -503,7 +510,7 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-500">All surplus food items published by merchant partners.</p>
           </div>
           <div className="space-y-3">
-            {listings.map((l) => (
+            {safeListings.map((l) => (
               <div key={l.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-3">
                   <img src={l.imageUrl} className="w-12 h-12 rounded-xl object-cover" alt="" />
@@ -529,8 +536,8 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-500">Real-time monitoring of all consumer reservations and purchases.</p>
           </div>
           <div className="space-y-3">
-            {orders.length > 0 ? (
-              orders.map((o) => (
+            {safeOrders.length > 0 ? (
+              safeOrders.map((o) => (
                 <div key={o.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                   <div>
                     <div className="font-bold text-slate-900">Order #{o.id} • {o.businessName}</div>
@@ -556,7 +563,7 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-500">Direct business-to-NGO surplus donations for hunger relief.</p>
           </div>
           <div className="space-y-3">
-            {donations.map((d) => (
+            {(donations || []).map((d) => (
               <div key={d.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                 <div>
                   <div className="font-bold text-slate-900">{d.foodDescription} ({d.quantity})</div>
@@ -579,7 +586,7 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-500">Secure Razorpay transaction logs and verification.</p>
           </div>
           <div className="space-y-3">
-            {ledgers.map((l) => (
+            {(ledgers || []).map((l) => (
               <div key={l.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                 <div>
                   <div className="font-bold text-slate-900">Payment ID: pay_{l.orderId}</div>
@@ -602,7 +609,7 @@ export const AdminDashboard: React.FC = () => {
             <p className="text-xs text-slate-500">Authorize direct deposit disbursements to merchant bank accounts.</p>
           </div>
           <div className="space-y-3">
-            {ledgers.map((l) => (
+            {(ledgers || []).map((l) => (
               <div key={l.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                 <div>
                   <div className="font-bold text-slate-900">Order #{l.orderId}</div>
@@ -838,7 +845,7 @@ export const AdminDashboard: React.FC = () => {
             <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold font-mono-code">STATUS: ZERO TAMPER DETECTED</span>
           </div>
           <div className="space-y-2.5">
-            {auditLogs.map((log) => (
+            {(auditLogs || []).map((log) => (
               <div key={log.id} className="p-3.5 rounded-xl bg-slate-900 text-white font-mono-code text-xs space-y-1">
                 <div className="flex items-center justify-between text-emerald-400">
                   <span className="font-bold">BLOCK #{log.id} • {log.action}</span>

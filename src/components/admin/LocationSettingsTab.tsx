@@ -329,7 +329,7 @@ export const LocationSettingsTab: React.FC = () => {
             <h3 className="text-base font-bold text-slate-900">Radius Policy Immutable Audit Trail</h3>
           </div>
           <span className="text-xs text-slate-500 font-semibold">
-            {radiusAuditLogs.length} Logged Mutation Records
+            {(radiusAuditLogs || []).length} Logged Mutation Records
           </span>
         </div>
 
@@ -348,7 +348,7 @@ export const LocationSettingsTab: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {radiusAuditLogs.map((log) => (
+              {(radiusAuditLogs || []).map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50/80">
                   <td className="py-2.5 text-slate-500 font-mono text-[11px]">
                     {new Date(log.timestamp).toLocaleString()}
