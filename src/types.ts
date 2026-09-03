@@ -289,7 +289,7 @@ export type PhoneVerificationStatus =
   | 'HIGH_RISK'
   | 'BLOCKED';
 
-export type PhoneLineStatus = 'ACTIVE' | 'REACHABLE' | 'UNREACHABLE' | 'INACTIVE' | 'UNKNOWN';
+export type PhoneLineStatus = 'ACTIVE' | 'REACHABLE' | 'UNREACHABLE' | 'INACTIVE' | 'SUSPENDED' | 'UNKNOWN';
 
 export type PhoneStatusType =
   | 'EMPTY'
@@ -351,21 +351,23 @@ export interface EmailVerification {
 }
 
 export interface PhoneIntelligence {
+  phone?: string;
+  nationalNumber?: string;
   valid: boolean;
   reachable: boolean;
   lineStatus: PhoneLineStatus;
   carrier?: string;
   country: string;
-  countryCode: string;
+  countryCode?: string;
   lineType: PhoneLineType;
   prepaidOrPostpaid?: 'PREPAID' | 'POSTPAID' | 'UNKNOWN';
   isDisposable: boolean;
   isVoip: boolean;
   riskLevel: PhoneRiskLevel;
-  riskScore: number; // 0 (safest) to 100 (highest risk)
-  normalizedPhone: string;
-  formattedDisplay: string;
-  maskedPhone: string;
+  riskScore?: number; // 0 (safest) to 100 (highest risk)
+  normalizedPhone?: string;
+  formattedDisplay?: string;
+  maskedPhone?: string;
   reputationSignals?: string[];
   safeErrorMessage?: string;
 }
@@ -375,7 +377,7 @@ export interface PhoneVerification {
   userId?: string;
   phone: string;
   normalizedPhone: string;
-  provider: '2FACTOR' | 'TWO_FACTOR';
+  provider: 'EXOTEL_VOICE' | 'EXOTEL';
   verificationStatus: PhoneVerificationStatus;
   riskLevel: PhoneRiskLevel;
   carrier?: string;
@@ -392,7 +394,7 @@ export interface PhoneVerificationSession {
   id: string;
   phone: string;
   normalizedPhone: string;
-  provider: '2FACTOR';
+  provider: 'EXOTEL_VOICE';
   provider_session_id?: string;
   purpose: OTPPurpose;
   status: 'PENDING' | 'VERIFIED' | 'EXPIRED' | 'FAILED';

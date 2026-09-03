@@ -287,6 +287,7 @@ export async function sendPhoneOTPApi(params: {
   success: boolean;
   status?: string;
   sessionId?: string;
+  requestId?: string;
   verificationSessionId?: string;
   normalizedPhone?: string;
   expiresInSeconds?: number;
@@ -296,7 +297,7 @@ export async function sendPhoneOTPApi(params: {
   code?: string;
 }> {
   try {
-    const res = await fetch('/api/auth/phone/send-otp', {
+    const res = await fetch('/api/auth/mobile/send-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -305,7 +306,7 @@ export async function sendPhoneOTPApi(params: {
   } catch (err: any) {
     return {
       success: false,
-      error: err.message || 'Network error while sending verification OTP.',
+      error: err.message || 'Network error while requesting verification call.',
     };
   }
 }
@@ -318,6 +319,7 @@ export async function resendPhoneOTPApi(params: {
   success: boolean;
   status?: string;
   sessionId?: string;
+  requestId?: string;
   verificationSessionId?: string;
   normalizedPhone?: string;
   expiresInSeconds?: number;
@@ -327,7 +329,7 @@ export async function resendPhoneOTPApi(params: {
   code?: string;
 }> {
   try {
-    const res = await fetch('/api/auth/phone/resend-otp', {
+    const res = await fetch('/api/auth/mobile/resend-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -336,13 +338,14 @@ export async function resendPhoneOTPApi(params: {
   } catch (err: any) {
     return {
       success: false,
-      error: err.message || 'Network error while resending verification OTP.',
+      error: err.message || 'Network error while requesting new verification call.',
     };
   }
 }
 
 export async function verifyPhoneOTPApi(params: {
   sessionId?: string;
+  requestId?: string;
   verificationSessionId?: string;
   phone: string;
   otpCode?: string;
@@ -359,7 +362,7 @@ export async function verifyPhoneOTPApi(params: {
   code?: string;
 }> {
   try {
-    const res = await fetch('/api/auth/phone/verify-otp', {
+    const res = await fetch('/api/auth/mobile/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -377,64 +380,20 @@ export async function sendPhoneVoiceOtpApi(params: {
   phone: string;
   purpose?: OTPPurpose;
   deviceId?: string;
-}): Promise<{
-  success: boolean;
-  status?: string;
-  sessionId?: string;
-  verificationSessionId?: string;
-  normalizedPhone?: string;
-  expiresInSeconds?: number;
-  resendAvailableInSeconds?: number;
-  maskedPhone?: string;
-  deliveryMethod?: 'VOICE_CALL';
-  error?: string;
-  code?: string;
-}> {
-  try {
-    const res = await fetch('/api/auth/phone/send-voice-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
-    return await res.json();
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err.message || 'Network error while dispatching verification call.',
-    };
-  }
+}) {
+  return sendPhoneOTPApi(params);
 }
 
 export async function verifyPhoneVoiceOtpApi(params: {
   sessionId?: string;
+  requestId?: string;
   verificationSessionId?: string;
   phone: string;
   otpCode?: string;
   otp?: string;
   purpose?: OTPPurpose;
-}): Promise<{
-  success: boolean;
-  status?: string;
-  verificationToken?: string;
-  normalizedPhone?: string;
-  phoneVerification?: PhoneVerification;
-  remainingAttempts?: number;
-  error?: string;
-  code?: string;
-}> {
-  try {
-    const res = await fetch('/api/auth/phone/verify-voice-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
-    return await res.json();
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err.message || 'Network error while verifying voice call OTP.',
-    };
-  }
+}) {
+  return verifyPhoneOTPApi(params);
 }
 
 export async function requestPhoneChangeApi(params: {

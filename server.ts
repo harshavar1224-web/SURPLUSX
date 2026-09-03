@@ -1348,11 +1348,11 @@ async function startServer() {
     });
   });
 
-  // Internal Diagnostics: GET /api/internal/two-factor-status
-  app.get('/api/internal/two-factor-status', (req, res) => {
+  // Internal Diagnostics: GET /api/internal/exotel-status
+  app.get('/api/internal/exotel-status', (req, res) => {
     res.json({
       success: true,
-      provider: '2FACTOR.IN',
+      provider: 'EXOTEL_VOICE_OTP',
       isConfigured: phoneVerificationService.isConfigured(),
       config: phoneVerificationService.getConfigurationStatus(),
     });
@@ -1371,16 +1371,15 @@ async function startServer() {
     });
   });
 
-  // 16. POST /api/auth/phone/send-otp - Dispatch 2Factor.in SMS OTP
-  app.post('/api/auth/phone/send-otp', async (req, res) => {
+  // Helper for sending Exotel Voice OTP
+  const handleSendMobileOtp = async (req: any, res: any) => {
     const { phone, purpose = 'SIGNUP', deviceId } = req.body;
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
 
     if (!phone) {
-      return res.status(400).json({ success: false, error: 'Mobile number is required to send verification code.' });
+      return res.status(400).json({ success: false, error: 'Mobile number is required to send verification call.' });
     }
 
-    // SurplusX Uniqueness Check: If SIGNUP, ensure phone is not already registered
     if (purpose === 'SIGNUP') {
       const normResult = phoneVerificationService.normalizePhone(phone);
       if (normResult.valid && normResult.normalized) {
@@ -1407,48 +1406,35 @@ async function startServer() {
       return res.status(400).json(result);
     }
 
-    res.json(result);
-  });
-
-  // 17. POST /api/auth/phone/resend-otp - Resend 2Factor.in SMS OTP
-  app.post('/api/auth/phone/resend-otp', async (req, res) => {
-    const { phone, purpose = 'SIGNUP', deviceId } = req.body;
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
-
-    if (!phone) {
-      return res.status(400).json({ success: false, error: 'Mobile number is required.' });
-    }
-
-    const result = await phoneVerificationService.resendOTP({
-      phone,
-      purpose,
-      clientIp,
-      deviceId,
+    res.json({
+      success: true,
+      message: 'OTP call initiated via Exotel',
+      status: result.status,
+      requestId: result.sessionId || result.requestId,
+      sessionId: result.sessionId || result.requestId,
+      normalizedPhone: result.normalizedPhone,
+      maskedPhone: result.maskedPhone,
+      expiresInSeconds: result.expiresInSeconds || 300,
+      resendAvailableInSeconds: result.resendAvailableInSeconds || 60,
     });
+  };
 
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json(result);
-  });
-
-  // 18. POST /api/auth/phone/verify-otp - Verify 2Factor.in SMS OTP & Issue One-Time Token
-  app.post('/api/auth/phone/verify-otp', async (req, res) => {
-    const { sessionId, verificationSessionId, phone, otpCode, otp, purpose = 'SIGNUP' } = req.body;
+  // Helper for verifying Exotel Voice OTP
+  const handleVerifyMobileOtp = async (req: any, res: any) => {
+    const { sessionId, requestId, verificationSessionId, phone, otpCode, otp, purpose = 'SIGNUP' } = req.body;
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
 
     const effectiveOtp = otpCode || otp;
     if (!phone || !effectiveOtp) {
       return res.status(400).json({
         success: false,
-        error: 'Both mobile number and verification code are required.',
+        error: 'Both mobile number and 6-digit OTP are required.',
       });
     }
 
     const result = await phoneVerificationService.verifyOTP({
-      sessionId: sessionId || verificationSessionId,
-      verificationSessionId: verificationSessionId || sessionId,
+      sessionId: sessionId || requestId || verificationSessionId,
+      verificationSessionId: verificationSessionId || requestId || sessionId,
       phone,
       otpCode: effectiveOtp,
       otp: effectiveOtp,
@@ -1461,76 +1447,19 @@ async function startServer() {
     }
 
     res.json(result);
-  });
+  };
 
-  // 18b. POST /api/auth/phone/send-voice-otp - Dispatch Automated Voice Call OTP for Mobile Verification Only
-  app.post('/api/auth/phone/send-voice-otp', async (req, res) => {
-    const { phone, purpose = 'SIGNUP', deviceId } = req.body;
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  // 16. Exotel Mobile Voice OTP API Endpoints
+  app.post('/api/auth/mobile/send-otp', handleSendMobileOtp);
+  app.post('/api/auth/mobile/resend-otp', handleSendMobileOtp);
+  app.post('/api/auth/mobile/verify-otp', handleVerifyMobileOtp);
 
-    if (!phone) {
-      return res.status(400).json({ success: false, error: 'Mobile number is required to send verification call.' });
-    }
-
-    // SurplusX Uniqueness Check: If SIGNUP, ensure phone is not already registered
-    if (purpose === 'SIGNUP') {
-      const normResult = phoneVerificationService.normalizePhone(phone);
-      if (normResult.valid && normResult.normalized) {
-        const existingUser = serverAccountService.findUserByPhone(normResult.normalized);
-        if (existingUser) {
-          return res.status(400).json({
-            success: false,
-            status: 'PHONE_REGISTERED',
-            error: 'Mobile number already registered with SurplusX.',
-            code: 'PHONE_REGISTERED',
-          });
-        }
-      }
-    }
-
-    const result = await phoneVerificationService.sendVoiceCallOTP({
-      phone,
-      purpose,
-      clientIp,
-      deviceId,
-    });
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json(result);
-  });
-
-  // 18c. POST /api/auth/phone/verify-voice-otp - Verify Voice Call OTP & Issue One-Time Verification Token
-  app.post('/api/auth/phone/verify-voice-otp', async (req, res) => {
-    const { sessionId, verificationSessionId, phone, otpCode, otp, purpose = 'SIGNUP' } = req.body;
-    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
-
-    const effectiveOtp = otpCode || otp;
-    if (!phone || !effectiveOtp) {
-      return res.status(400).json({
-        success: false,
-        error: 'Both mobile number and verification code are required.',
-      });
-    }
-
-    const result = await phoneVerificationService.verifyVoiceCallOTP({
-      sessionId: sessionId || verificationSessionId,
-      verificationSessionId: verificationSessionId || sessionId,
-      phone,
-      otpCode: effectiveOtp,
-      otp: effectiveOtp,
-      purpose,
-      clientIp,
-    });
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    res.json(result);
-  });
+  // Aliases for /api/auth/phone/*
+  app.post('/api/auth/phone/send-otp', handleSendMobileOtp);
+  app.post('/api/auth/phone/resend-otp', handleSendMobileOtp);
+  app.post('/api/auth/phone/verify-otp', handleVerifyMobileOtp);
+  app.post('/api/auth/phone/send-voice-otp', handleSendMobileOtp);
+  app.post('/api/auth/phone/verify-voice-otp', handleVerifyMobileOtp);
 
   // GET /api/auth/me - Authoritative Session Verification (90-day persistence)
   app.get('/api/auth/me', (req, res) => {

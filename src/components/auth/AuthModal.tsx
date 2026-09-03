@@ -433,41 +433,7 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  const handleSendPhoneOtp = async () => {
-    setPhoneVerificationError(null);
-    const phoneRes = normalizeIndianPhoneClient(phoneInput);
-    if (!phoneRes.valid) {
-      setPhoneVerificationError(phoneRes.error || 'Please enter a valid 10-digit Indian mobile number.');
-      return;
-    }
-
-    if (phoneIntelligence?.lineStatus === 'INACTIVE' || phoneIntelligence?.lineStatus === 'UNREACHABLE') {
-      setPhoneVerificationError(phoneIntelligence.safeErrorMessage || 'This mobile number is not active or reachable.');
-      return;
-    }
-
-    setIsSendingPhoneOtp(true);
-    try {
-      const res = await sendPhoneOTPApi({
-        phone: phoneRes.normalized,
-        purpose: 'SIGNUP',
-      });
-
-      if (!res.success) {
-        setPhoneVerificationError(res.error || 'Unable to send verification OTP.');
-      } else {
-        setPhoneOtpSent(true);
-        setPhoneOtpDeliveryMethod('SMS');
-        setPhoneOtpSessionId(res.sessionId || res.verificationSessionId || null);
-        setPhoneResendCooldown(res.resendAvailableInSeconds || 45);
-        triggerToast(`Verification code sent via SMS to ${formatIndianPhoneDisplayClient(phoneRes.normalized)}`, 'info');
-      }
-    } catch (err: any) {
-      setPhoneVerificationError(err.message || 'Network error while sending verification OTP.');
-    } finally {
-      setIsSendingPhoneOtp(false);
-    }
-  };
+  const handleSendPhoneOtp = handleSendPhoneVoiceOtp;
 
   const handleVerifyPhoneOtp = async () => {
     setPhoneVerificationError(null);
@@ -1325,35 +1291,15 @@ export const AuthModal: React.FC = () => {
                           availabilityResult.conflictType === 'PHONE_TAKEN' ||
                           availabilityResult.conflictType === 'SAME_IDENTITY_DIFFERENT_ROLE'
                         }
-                        className="px-3 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:bg-slate-300 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                        title="Send automated voice call with OTP"
+                        className="px-3.5 py-2 text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:bg-slate-300 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                        title="Send Exotel automated voice call with OTP"
                       >
                         {isSendingPhoneOtp ? (
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                         ) : (
                           <PhoneCall className="w-3.5 h-3.5" />
                         )}
-                        <span>{phoneOtpSent && phoneOtpDeliveryMethod === 'VOICE_CALL' ? 'Call Again' : '📞 Voice Call OTP'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSendPhoneOtp}
-                        disabled={
-                          isSendingPhoneOtp ||
-                          !normalizedPhonePreview.valid ||
-                          isLookingUpPhone ||
-                          phoneIntelligence?.lineStatus === 'INACTIVE' ||
-                          phoneIntelligence?.lineStatus === 'UNREACHABLE' ||
-                          phoneIntelligence?.isDisposable ||
-                          availabilityResult.conflictType === 'PHONE_TAKEN' ||
-                          availabilityResult.conflictType === 'SAME_IDENTITY_DIFFERENT_ROLE'
-                        }
-                        className="px-2.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-xl transition-all cursor-pointer flex items-center gap-1"
-                        title="Send SMS text OTP"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-slate-500" />
-                        <span>SMS</span>
+                        <span>{phoneOtpSent ? 'Call Again' : '📞 Call Me with OTP'}</span>
                       </button>
                     </div>
                   )}
@@ -1404,8 +1350,8 @@ export const AuthModal: React.FC = () => {
                   </div>
                 )}
 
-                {/* Voice Call OTP Input Section */}
-                {phoneOtpSent && !phoneVerified && phoneOtpDeliveryMethod === 'VOICE_CALL' && (
+                {/* Exotel Voice Call OTP Input Section */}
+                {phoneOtpSent && !phoneVerified && (
                   <div className="p-4 bg-amber-50/90 border-2 border-amber-300 rounded-2xl space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200 shadow-xs">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 bg-amber-100 text-amber-900 rounded-xl shrink-0 animate-bounce">
@@ -1416,17 +1362,17 @@ export const AuthModal: React.FC = () => {
                           <span>📞 We're calling {formatIndianPhoneDisplayClient(normalizedPhonePreview.normalized || phoneInput)}...</span>
                         </div>
                         <p className="text-xs font-medium text-amber-900 leading-relaxed">
-                          Your OTP is being delivered through an automated phone call.
+                          📞 Your OTP is being delivered through an automated phone call.
                         </p>
                         <p className="text-xs font-bold text-amber-950">
-                          Please answer the call and do not reject or decline it. Listen to the OTP and enter it below.
+                          Please answer the call and do not reject it. Listen carefully to the OTP and enter it below.
                         </p>
                       </div>
                     </div>
 
                     <div className="p-2.5 bg-white/90 rounded-xl border border-amber-200 text-[11px] text-slate-700 flex items-center gap-2 font-mono">
                       <Volume2 className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
-                      <span>Automated call says: "Your SurplusX verification OTP is 482731. I repeat, 482731."</span>
+                      <span>Exotel automated voice call: "Your SurplusX verification OTP is 482731. I repeat, 482731."</span>
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -1472,84 +1418,6 @@ export const AuthModal: React.FC = () => {
                           <span>Didn't receive the call? Call Again</span>
                         </button>
                       )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPhoneOtpDeliveryMethod('SMS');
-                          handleSendPhoneOtp();
-                        }}
-                        className="text-slate-600 hover:text-slate-900 underline text-[11px] font-semibold cursor-pointer"
-                      >
-                        Switch to SMS OTP
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* SMS OTP Input Section */}
-                {phoneOtpSent && !phoneVerified && phoneOtpDeliveryMethod === 'SMS' && (
-                  <div className="p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-950">
-                        <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>SMS OTP sent to <strong className="font-mono text-emerald-800">{phoneIntelligence?.maskedPhone || (phoneInput ? `******${phoneInput.slice(-4)}` : '******')}</strong></span>
-                      </div>
-                      {phoneResendCooldown > 0 ? (
-                        <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
-                          <Timer className="w-3 h-3 text-slate-400" />
-                          <span>Resend in {phoneResendCooldown}s</span>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleSendPhoneOtp}
-                          disabled={isSendingPhoneOtp}
-                          className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                        >
-                          Resend SMS
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <input
-                        type="text"
-                        value={phoneOtpInput}
-                        onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        maxLength={6}
-                        placeholder="_ _ _ _ _ _"
-                        className="w-full sm:w-36 text-center font-mono font-bold tracking-[0.3em] text-base px-3 py-2 rounded-xl border border-emerald-300 bg-white focus:border-emerald-600 outline-hidden shadow-2xs placeholder:tracking-normal placeholder:font-sans placeholder:text-slate-400"
-                        autoFocus
-                      />
-
-                      <button
-                        type="button"
-                        onClick={handleVerifyPhoneOtp}
-                        disabled={isVerifyingPhoneOtp || phoneOtpInput.length !== 6}
-                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        {isVerifyingPhoneOtp ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Check className="w-3.5 h-3.5" />
-                        )}
-                        <span>VERIFY MOBILE</span>
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] pt-0.5">
-                      <span className="text-slate-500">SMS OTP valid for 10 minutes.</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPhoneOtpDeliveryMethod('VOICE_CALL');
-                          handleSendPhoneVoiceOtp();
-                        }}
-                        className="text-amber-800 hover:text-amber-950 font-bold underline cursor-pointer"
-                      >
-                        Switch to Automated Voice Call OTP
-                      </button>
                     </div>
                   </div>
                 )}
