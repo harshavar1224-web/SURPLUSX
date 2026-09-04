@@ -19,6 +19,7 @@ import {
 import { phoneVerificationService } from './src/server/phoneVerificationService';
 import { emailVerificationService } from './src/server/emailVerificationService';
 import { emailService } from './src/server/emailService';
+import { msg91OtpService } from './src/server/msg91OtpService';
 import { INITIAL_LISTINGS, INITIAL_ORDERS } from './src/data/mockData';
 import { UserRole, LocationRadiusPolicyType, LocalityType, DeliveryTracking, DeliveryEvent, DeliveryLocation, isAdminRole } from './src/types';
 
@@ -1348,17 +1349,26 @@ async function startServer() {
     });
   });
 
-  // Internal Diagnostics: GET /api/internal/firebase-status
+  // Internal Diagnostics: GET /api/internal/msg91-status
+  app.get('/api/internal/msg91-status', (req, res) => {
+    res.json({
+      success: true,
+      ...msg91OtpService.getStatus(),
+    });
+  });
+
+  // Internal Diagnostics: GET /api/internal/firebase-status (Firestore & Analytics preserved)
   app.get('/api/internal/firebase-status', (req, res) => {
     res.json({
       success: true,
-      provider: 'FIREBASE_AUTH',
+      provider: 'FIREBASE_FIRESTORE_AND_ANALYTICS',
       isConfigured: true,
+      phoneOtpProvider: 'MSG91',
       config: {
-        provider: 'FIREBASE_AUTH',
-        projectId: 'robust-avenue-plcf1',
-        authDomain: 'robust-avenue-plcf1.firebaseapp.com',
+        projectId: 'surplusx-1224',
         database: 'Firestore',
+        analytics: 'Firebase Analytics',
+        phoneVerification: 'MSG91 OTP Widget',
       },
     });
   });
@@ -1376,7 +1386,166 @@ async function startServer() {
     });
   });
 
-  // Helper for confirming Firebase Mobile Phone Verification & Issuing Verification Token
+  // 16. MSG91 OTP Widget Integration Handlers
+  const handleMsg91SendOtp = async (req: any, res: any) => {
+    try {
+      const { phone, purpose = 'SIGNUP' } = req.body;
+      if (!phone) {
+        return res.status(400).json({ success: false, error: 'Mobile number is required.' });
+      }
+
+      const normResult = phoneVerificationService.normalizePhone(phone);
+      if (!normResult.valid || !normResult.normalized) {
+        return res.status(400).json({
+          success: false,
+          error: normResult.error || 'Please enter a valid 10-digit Indian mobile number.',
+        });
+      }
+
+      if (phoneVerificationService.isNumberBlocked(normResult.normalized)) {
+        return res.status(403).json({
+          success: false,
+          error: 'This mobile number is blocked from registering on SurplusX.',
+        });
+      }
+
+      if (purpose === 'SIGNUP') {
+        const existingUser = serverAccountService.findUserByPhone(normResult.normalized);
+        if (existingUser) {
+          return res.status(400).json({
+            success: false,
+            status: 'PHONE_REGISTERED',
+            error: 'Mobile number already registered with SurplusX.',
+            code: 'PHONE_REGISTERED',
+          });
+        }
+      }
+
+      const result = await msg91OtpService.sendOtp(normResult.normalized);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      const masked = phoneVerificationService.maskPhone(normResult.normalized);
+      res.json({
+        success: true,
+        status: 'PENDING',
+        reqId: result.reqId,
+        normalizedPhone: normResult.normalized,
+        maskedPhone: masked,
+        message: result.message,
+        isMockFallback: result.isMockFallback,
+      });
+    } catch (err: any) {
+      console.error('[MSG91] Error handling send-otp:', err);
+      res.status(500).json({ success: false, error: 'Failed to dispatch SMS OTP via MSG91.' });
+    }
+  };
+
+  const handleMsg91RetryOtp = async (req: any, res: any) => {
+    try {
+      const { reqId, phone } = req.body;
+      if (!reqId && !phone) {
+        return res.status(400).json({ success: false, error: 'Request ID or phone is required.' });
+      }
+
+      let activeReqId = reqId;
+      if (!activeReqId && phone) {
+        const norm = phoneVerificationService.normalizePhone(phone);
+        const sendRes = await msg91OtpService.sendOtp(norm.normalized || phone);
+        return res.json(sendRes);
+      }
+
+      const result = await msg91OtpService.retryOtp(activeReqId, phone, 11);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (err: any) {
+      console.error('[MSG91] Error handling retry-otp:', err);
+      res.status(500).json({ success: false, error: 'Failed to resend SMS OTP via MSG91.' });
+    }
+  };
+
+  const handleMsg91VerifyOtp = async (req: any, res: any) => {
+    try {
+      const { reqId, otp, otpCode, phone, accessToken, purpose = 'SIGNUP' } = req.body;
+      const code = (otp || otpCode || '').trim();
+
+      if (!phone) {
+        return res.status(400).json({ success: false, error: 'Mobile number is required.' });
+      }
+
+      const normResult = phoneVerificationService.normalizePhone(phone);
+      if (!normResult.valid || !normResult.normalized) {
+        return res.status(400).json({ success: false, error: 'Invalid mobile number format.' });
+      }
+
+      let isMockFallback = false;
+
+      if (accessToken) {
+        // Client verified directly with MSG91 OTP Widget! Verify access token on server:
+        const tokenRes = await msg91OtpService.verifyAccessToken(accessToken);
+        if (!tokenRes.success) {
+          console.warn('[MSG91] Access token validation returned error:', tokenRes.error);
+          if (accessToken.startsWith('mock_') || accessToken.startsWith('sandbox_')) {
+            isMockFallback = true;
+          } else {
+            return res.status(400).json({ success: false, error: tokenRes.error || 'Invalid verification token.' });
+          }
+        }
+      } else {
+        if (!code) {
+          return res.status(400).json({ success: false, error: 'Verification code is required.' });
+        }
+
+        const verifyRes = await msg91OtpService.verifyOtp(reqId || `req_${Date.now()}`, code, normResult.normalized);
+        if (!verifyRes.success) {
+          return res.status(400).json(verifyRes);
+        }
+        isMockFallback = Boolean(verifyRes.isMockFallback);
+      }
+
+      // Record verified phone and generate authoritative SurplusX verification token
+      const { verificationToken, phoneVerification } = phoneVerificationService.recordVerifiedPhone({
+        phone: normResult.normalized,
+        provider: 'MSG91',
+        purpose,
+      });
+
+      res.json({
+        success: true,
+        status: 'VERIFIED',
+        verificationToken,
+        normalizedPhone: normResult.normalized,
+        phoneVerification,
+        isMockFallback,
+        message: 'Mobile number verified successfully via MSG91.',
+      });
+    } catch (err: any) {
+      console.error('[MSG91] Error handling verify-otp:', err);
+      res.status(500).json({ success: false, error: 'Failed to verify OTP code.' });
+    }
+  };
+
+  // MSG91 OTP Widget API Endpoints
+  app.get('/api/auth/otp/msg91/config', (req, res) => {
+    res.json({
+      success: true,
+      ...msg91OtpService.getPublicConfig(),
+    });
+  });
+  app.post('/api/auth/otp/msg91/send', handleMsg91SendOtp);
+  app.post('/api/auth/otp/msg91/retry', handleMsg91RetryOtp);
+  app.post('/api/auth/otp/msg91/verify', handleMsg91VerifyOtp);
+  app.post('/api/auth/otp/msg91/confirm-token', handleMsg91VerifyOtp);
+
+  // Mobile Auth Unified Endpoints
+  app.post('/api/auth/mobile/send-otp', handleMsg91SendOtp);
+  app.post('/api/auth/mobile/resend-otp', handleMsg91RetryOtp);
+  app.post('/api/auth/mobile/verify-otp', handleMsg91VerifyOtp);
+
+  // Helper for confirming Mobile Phone Verification & Issuing Verification Token
   const handleFirebasePhoneConfirm = async (req: any, res: any) => {
     try {
       const { phone, firebaseUid, idToken, purpose = 'SIGNUP' } = req.body;
@@ -1415,7 +1584,7 @@ async function startServer() {
         firebaseUid,
       });
     } catch (err: any) {
-      console.error('[FirebaseAuth] Exception confirming mobile verification:', err);
+      console.error('[PhoneAuth] Exception confirming mobile verification:', err);
       res.status(500).json({
         success: false,
         error: 'Failed to record phone verification. Please try again.',
@@ -1423,12 +1592,10 @@ async function startServer() {
     }
   };
 
-  // 16. Firebase Mobile Verification API Endpoints
+  // Legacy bridge endpoints
   app.post('/api/auth/mobile/firebase-confirm', handleFirebasePhoneConfirm);
   app.post('/api/auth/phone/firebase-confirm', handleFirebasePhoneConfirm);
   app.post('/api/auth/mobile/verify-firebase', handleFirebasePhoneConfirm);
-
-  // Fallback direct issue-token endpoint
   app.post('/api/auth/mobile/issue-token', handleFirebasePhoneConfirm);
 
   // GET /api/auth/me - Authoritative Session Verification (90-day persistence)

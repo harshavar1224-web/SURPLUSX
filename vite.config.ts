@@ -6,6 +6,9 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_MSG91_WIDGET_ID': JSON.stringify(process.env.MSG91_WIDGET_ID || ''),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

@@ -431,27 +431,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Restore Session on mount (3-month session persistence)
   useEffect(() => {
-    const restoreSession = async () => {
+    let isMounted = true;
+    const restoreSession = async (retries = 2) => {
+      const localToken = localStorage.getItem('surplusx_session_token');
+      if (!localToken) {
+        if (isMounted) setAuthLoading(false);
+        return;
+      }
+
       try {
-        const localToken = localStorage.getItem('surplusx_session_token');
         const res = await fetch('/api/auth/me', {
-          headers: localToken ? { 'Authorization': `Bearer ${localToken}` } : {},
+          headers: { 'Authorization': `Bearer ${localToken}` },
         });
+        if (!isMounted) return;
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.user) {
             setCurrentUser(data.user);
           }
-        } else {
+        } else if (res.status === 401 || res.status === 403) {
           localStorage.removeItem('surplusx_session_token');
         }
       } catch (err) {
-        console.error('Session restoration error:', err);
+        if (retries > 0) {
+          setTimeout(() => {
+            if (isMounted) restoreSession(retries - 1);
+          }, 800);
+          return;
+        }
+        console.warn('Session restoration skipped (server starting or offline):', err);
       } finally {
-        setAuthLoading(false);
+        if (isMounted) {
+          setAuthLoading(false);
+        }
       }
     };
     restoreSession();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const setAdminPreviewRole = (role: UserRole | null) => {
@@ -535,17 +553,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   });
 
-  const fetchListings = async () => {
-    console.log('--- fetchListings START ---');
+  const fetchListings = async (retries = 2) => {
     try {
       // Add timestamp to bypass any browser or proxy caching
       const res = await fetch(`/api/admin/listings?t=${Date.now()}`);
-      console.log('fetchListings status:', res.status);
       if (res.ok) {
         const data = await res.json();
-        console.log('fetchListings data success:', data.success);
         if (data.success && data.listings) {
-          console.log('fetchListings data listings count:', data.listings.length);
           // Re-calculate distances based on current user location or defaults
           const mappedListings = data.listings.map((l: any) => {
             try {
@@ -561,18 +575,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 ),
               };
             } catch (err) {
-              console.warn('Distance calculation failed for listing:', l.id, err);
               return { ...l, distanceKm: 0 };
             }
           });
-          console.log('fetchListings setListings calling with count:', mappedListings.length);
           setListings(mappedListings);
         }
       } else {
-        console.error('fetchListings failed with status:', res.status);
+        console.warn('fetchListings response status:', res.status);
       }
     } catch (error) {
-      console.error('Error fetching admin listings:', error);
+      if (retries > 0) {
+        setTimeout(() => {
+          fetchListings(retries - 1);
+        }, 800);
+        return;
+      }
+      console.warn('Remote listings currently unavailable, keeping local catalog:', error);
     }
   };
   const [searchQuery, setSearchQuery] = useState<string>('');

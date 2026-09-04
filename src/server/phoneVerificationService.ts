@@ -93,10 +93,11 @@ export class PhoneVerificationService {
   }
 
   public getConfigurationStatus() {
+    const isMsg91Configured = Boolean(process.env.MSG91_AUTH_KEY && process.env.MSG91_WIDGET_ID);
     return {
-      provider: 'FIREBASE_AUTH',
-      isConfigured: true,
-      senderId: 'FIREBASE_SMS',
+      provider: 'MSG91',
+      isConfigured: isMsg91Configured,
+      senderId: 'MSG91_OTP',
       country: 'IN',
     };
   }
@@ -452,6 +453,37 @@ export class PhoneVerificationService {
 
     this.phoneVerifications.set(normalized, verif);
     return { success: true, phoneVerification: verif };
+  }
+
+  public recordVerifiedPhone(params: {
+    phone: string;
+    provider?: 'MSG91' | 'FIREBASE' | 'FIREBASE_AUTH' | 'LOCAL';
+    purpose?: OTPPurpose;
+  }): { verificationToken: string; phoneVerification: PhoneVerification } {
+    const norm = this.normalizePhone(params.phone);
+    const normalized = norm.normalized || params.phone;
+    const nowIso = new Date().toISOString();
+    const token = this.issueVerificationToken(normalized, params.purpose || 'SIGNUP');
+
+    const verif: PhoneVerification = {
+      id: `pv_msg91_${Date.now().toString(36)}`,
+      phone: params.phone,
+      normalizedPhone: normalized,
+      provider: params.provider || 'MSG91',
+      verificationStatus: 'VERIFIED',
+      riskLevel: 'LOW_RISK',
+      carrier: 'MSG91 SMS Gateway',
+      lineType: 'MOBILE',
+      lineStatus: 'ACTIVE',
+      country: 'IN',
+      attemptCount: 1,
+      verifiedAt: nowIso,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    this.phoneVerifications.set(normalized, verif);
+    return { verificationToken: token, phoneVerification: verif };
   }
 
   public getPhoneVerificationRecord(phone: string): PhoneVerification | null {

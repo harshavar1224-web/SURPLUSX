@@ -50,16 +50,16 @@ import {
   lookupPhoneApi,
   sendPhoneOTPApi,
   verifyPhoneOTPApi,
-  confirmFirebasePhoneVerifiedApi,
 } from '../../services/identityClient';
 import {
-  initRecaptchaVerifier,
-  sendFirebasePhoneOtp,
-  verifyFirebasePhoneOtp,
   syncUserProfileToFirestore,
   trackEvent,
 } from '../../lib/firebase';
-import { ConfirmationResult } from 'firebase/auth';
+import {
+  sendMsg91PhoneOtp,
+  retryMsg91PhoneOtp,
+  verifyMsg91PhoneOtp,
+} from '../../services/msg91Client';
 
 type AuthViewMode = 'login' | 'signup' | 'forgot_password';
 
@@ -128,7 +128,6 @@ export const AuthModal: React.FC = () => {
   const [phoneIntelligence, setPhoneIntelligence] = useState<PhoneIntelligence | null>(null);
   const [isLookingUpPhone, setIsLookingUpPhone] = useState(false);
   const [phoneOtpSessionId, setPhoneOtpSessionId] = useState<string | null>(null);
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [phoneOtpInput, setPhoneOtpInput] = useState('');
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
@@ -138,6 +137,7 @@ export const AuthModal: React.FC = () => {
   const [phoneResendCooldown, setPhoneResendCooldown] = useState(0);
   const [phoneVerificationError, setPhoneVerificationError] = useState<string | null>(null);
   const [phoneOtpDeliveryMethod, setPhoneOtpDeliveryMethod] = useState<'SMS'>('SMS');
+  const [isPhoneSandboxMode, setIsPhoneSandboxMode] = useState(false);
 
   // Real-time Identity Availability Check states
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
@@ -403,7 +403,7 @@ export const AuthModal: React.FC = () => {
   };
 
   // --------------------------------------------------------------------------
-  // Handlers for Phone Verification (Firebase Phone Auth SMS OTP)
+  // Handlers for Phone Verification (MSG91 OTP Widget SMS Gateway)
   // --------------------------------------------------------------------------
 
   const handleSendPhoneSmsOtp = async () => {
@@ -421,21 +421,31 @@ export const AuthModal: React.FC = () => {
 
     setIsSendingPhoneOtp(true);
     try {
-      // Initialize reCAPTCHA container for Firebase Phone Auth using stable root container
-      const verifier = initRecaptchaVerifier('recaptcha-container');
-      const res = await sendFirebasePhoneOtp(phoneRes.normalized, verifier);
+      trackEvent('phone_verification_started', { phone: phoneRes.normalized });
+      const res = await sendMsg91PhoneOtp(phoneRes.normalized);
 
-      if (!res.success || !res.confirmationResult) {
-        setPhoneVerificationError(res.error || 'Unable to dispatch Firebase verification SMS.');
+      if (!res.success) {
+        setPhoneVerificationError(res.error || 'Unable to dispatch verification SMS via MSG91.');
+        trackEvent('phone_otp_failed', { phone: phoneRes.normalized, reason: res.error });
       } else {
-        setConfirmationResult(res.confirmationResult);
+        setPhoneOtpSessionId(res.reqId || null);
         setPhoneOtpSent(true);
         setPhoneOtpDeliveryMethod('SMS');
         setPhoneResendCooldown(60);
-        triggerToast(`💬 SMS OTP sent via Firebase to ${formatIndianPhoneDisplayClient(phoneRes.normalized)}. Please check your text messages!`, 'info');
+        trackEvent('phone_otp_sent', { phone: phoneRes.normalized, provider: 'MSG91' });
+
+        if (res.isMockFallback) {
+          setIsPhoneSandboxMode(true);
+          setPhoneOtpInput('123456');
+          triggerToast(`💬 MSG91 credentials not configured. Test OTP code: 123456 (pre-filled for development preview)`, 'info');
+        } else {
+          setIsPhoneSandboxMode(false);
+          triggerToast(`💬 SMS OTP sent via MSG91 to ${formatIndianPhoneDisplayClient(phoneRes.normalized)}. Please check your text messages!`, 'info');
+        }
       }
     } catch (err: any) {
-      setPhoneVerificationError(err.message || 'Network error while dispatching SMS OTP.');
+      setPhoneVerificationError(err.message || 'Network error while dispatching SMS OTP via MSG91.');
+      trackEvent('phone_otp_failed', { phone: phoneRes.normalized, reason: err.message });
     } finally {
       setIsSendingPhoneOtp(false);
     }
@@ -451,42 +461,34 @@ export const AuthModal: React.FC = () => {
       setPhoneVerificationError('Invalid mobile number format.');
       return;
     }
-    if (!phoneOtpInput || phoneOtpInput.trim().length !== 6) {
-      setPhoneVerificationError('Please enter the 6-digit SMS verification code.');
+    const cleanOtp = phoneOtpInput.trim();
+    if (!cleanOtp || cleanOtp.length < 4 || cleanOtp.length > 6) {
+      setPhoneVerificationError('Please enter the verification code received via SMS (4 to 6 digits).');
       return;
     }
 
     setIsVerifyingPhoneOtp(true);
     try {
-      let firebaseUid: string | undefined;
-
-      if (confirmationResult) {
-        const res = await verifyFirebasePhoneOtp(confirmationResult, phoneOtpInput.trim());
-        if (!res.success) {
-          setPhoneVerificationError(res.error || 'Incorrect OTP code. Please check your SMS and try again.');
-          setIsVerifyingPhoneOtp(false);
-          return;
-        }
-        firebaseUid = res.userCredential?.user?.uid;
-      }
-
-      // Confirm verification with SurplusX backend and receive single-use token
-      const serverConfirm = await confirmFirebasePhoneVerifiedApi({
+      trackEvent('phone_verification_attempt', { phone: phoneRes.normalized });
+      const res = await verifyMsg91PhoneOtp({
+        reqId: phoneOtpSessionId || '',
+        otp: cleanOtp,
         phone: phoneRes.normalized,
-        firebaseUid,
         purpose: 'SIGNUP',
       });
 
-      if (!serverConfirm.success) {
-        setPhoneVerificationError(serverConfirm.error || 'Failed to authorize phone verification token.');
+      if (!res.success) {
+        setPhoneVerificationError(res.error || 'Incorrect OTP code. Please check your SMS and try again.');
+        trackEvent('phone_otp_failed', { phone: phoneRes.normalized, reason: res.error });
       } else {
         setPhoneVerified(true);
-        setPhoneVerificationToken(serverConfirm.verificationToken || `tok_fb_${firebaseUid || Date.now()}`);
-        triggerToast('Mobile number verified successfully! ✓', 'success');
-        trackEvent('phone_verification_success', { phone: phoneRes.normalized });
+        setPhoneVerificationToken(res.verificationToken || `tok_msg91_${Date.now()}`);
+        triggerToast('Mobile number verified successfully via MSG91! ✓', 'success');
+        trackEvent('phone_otp_verified', { phone: phoneRes.normalized, provider: 'MSG91' });
       }
     } catch (err: any) {
-      setPhoneVerificationError(err.message || 'Failed to verify mobile number.');
+      setPhoneVerificationError(err.message || 'Failed to verify mobile number via MSG91.');
+      trackEvent('phone_otp_failed', { phone: phoneRes.normalized, reason: err.message });
     } finally {
       setIsVerifyingPhoneOtp(false);
     }
@@ -497,9 +499,9 @@ export const AuthModal: React.FC = () => {
     setPhoneVerificationToken(null);
     setPhoneOtpSent(false);
     setPhoneOtpInput('');
-    setConfirmationResult(null);
     setPhoneOtpSessionId(null);
     setPhoneVerificationError(null);
+    setIsPhoneSandboxMode(false);
   };
 
   // Authoritative Sign In (NO ROLE SELECTOR)
@@ -606,7 +608,7 @@ export const AuthModal: React.FC = () => {
       );
 
       if (res.success && res.user) {
-        // Sync profile to Firestore
+        // Sync profile to Firestore with MSG91 verification confirmation
         await syncUserProfileToFirestore({
           id: res.user.id,
           name: fullName.trim(),
@@ -617,9 +619,15 @@ export const AuthModal: React.FC = () => {
           organizationName: orgName.trim() || undefined,
           city,
           phoneVerified: true,
+          phoneVerifiedAt: new Date().toISOString(),
+          phoneVerificationProvider: 'MSG91',
           emailVerified: true,
         });
-        trackEvent('signup_success', { role: selectedRole, userId: res.user.id });
+        trackEvent('signup_success', {
+          role: selectedRole,
+          userId: res.user.id,
+          phoneVerificationProvider: 'MSG91',
+        });
         setIsAuthModalOpen(false);
       } else {
         setErrorMsg(res.error || 'Registration failed.');
@@ -1318,7 +1326,7 @@ export const AuthModal: React.FC = () => {
                           availabilityResult.conflictType === 'SAME_IDENTITY_DIFFERENT_ROLE'
                         }
                         className="px-3.5 py-2 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:bg-slate-300 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
-                        title="Send SMS OTP via Firebase"
+                        title="Send SMS OTP via MSG91"
                       >
                         {isSendingPhoneOtp ? (
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1330,9 +1338,6 @@ export const AuthModal: React.FC = () => {
                     </div>
                   )}
                 </div>
-
-                {/* Firebase reCAPTCHA Invisible Container */}
-                <div id="recaptcha-verifier-container" className="empty:hidden"></div>
 
                 {/* Phone Intelligence Badges (Carrier, Reachability, Risk) */}
                 {phoneInput && (
@@ -1377,16 +1382,11 @@ export const AuthModal: React.FC = () => {
                     <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                     <div className="space-y-1">
                       <span className="font-medium leading-relaxed block">{phoneVerificationError}</span>
-                      {phoneVerificationError.includes('Firebase Console') && (
-                        <div className="text-[11px] text-rose-700 font-normal mt-1 bg-white/70 p-2 rounded-lg border border-rose-200">
-                          <strong>Quick Setup:</strong> In your Firebase Console, open <em>Authentication &gt; Sign-in method &gt; Add new provider &gt; Phone</em>, and toggle it to <strong>Enabled</strong>.
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Firebase SMS OTP Input Section */}
+                {/* MSG91 SMS OTP Input Section */}
                 {phoneOtpSent && !phoneVerified && (
                   <div className="p-4 bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200 shadow-xs">
                     <div className="flex items-start gap-3">
@@ -1398,11 +1398,17 @@ export const AuthModal: React.FC = () => {
                           <span>💬 Verification Code Sent via SMS</span>
                         </div>
                         <p className="text-xs font-medium text-emerald-900 leading-relaxed">
-                          We sent a 6-digit OTP via SMS to <strong className="font-bold text-emerald-950">{formatIndianPhoneDisplayClient(normalizedPhonePreview.normalized || phoneInput)}</strong>.
+                          We sent a 6-digit OTP via MSG91 SMS to <strong className="font-bold text-emerald-950">{formatIndianPhoneDisplayClient(normalizedPhonePreview.normalized || phoneInput)}</strong>.
                         </p>
-                        <p className="text-xs font-medium text-slate-700">
-                          Please check your mobile text messages and enter the 6-digit OTP below.
-                        </p>
+                        {isPhoneSandboxMode ? (
+                          <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 font-medium">
+                            MSG91 credentials not configured in environment. Development test OTP is pre-filled: <strong>123456</strong>. Click Verify to continue.
+                          </div>
+                        ) : (
+                          <p className="text-xs font-medium text-slate-700">
+                            Please check your mobile text messages and enter the 6-digit OTP below.
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1412,7 +1418,7 @@ export const AuthModal: React.FC = () => {
                         value={phoneOtpInput}
                         onChange={(e) => setPhoneOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
                         maxLength={6}
-                        placeholder="_ _ _ _ _ _"
+                        placeholder="• • • •"
                         className="w-full sm:w-40 text-center font-mono font-black tracking-[0.35em] text-lg px-3 py-2.5 rounded-xl border-2 border-emerald-400 bg-white focus:border-emerald-600 outline-hidden shadow-2xs placeholder:tracking-normal placeholder:font-sans placeholder:text-slate-400"
                         autoFocus
                       />
@@ -1420,7 +1426,7 @@ export const AuthModal: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleVerifyPhoneOtp}
-                        disabled={isVerifyingPhoneOtp || phoneOtpInput.length !== 6}
+                        disabled={isVerifyingPhoneOtp || phoneOtpInput.trim().length < 4}
                         className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2 flex-1"
                       >
                         {isVerifyingPhoneOtp ? (
